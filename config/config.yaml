@@ -1,0 +1,73 @@
+# System Configuration
+
+camera:
+  resolution: [1280, 720]
+  framerate: 30
+  capture_interval: 2  # Seconds between automatic captures
+  rotation: 0
+  flip_horizontal: false
+  flip_vertical: false
+  capture_mode: "continuous"  # Continuous photo capture
+  capture_interval: 2  # Seconds between captures
+
+gpio:
+  button_call_999: 17  # Button 1: Call emergency
+  button_stop_call: 27  # Button 2: Stop/cancel emergency call
+  led_fall: 22
+  led_emergency: 23
+  bounce_time: 200  # milliseconds
+
+fall_detection:
+  model_path: "models/fall_detection.pt"
+  confidence_threshold: 0.75
+  check_interval: 0.1  # seconds between frames
+  enabled: true
+  use_bpu: true  # Use RDK X5 BPU for acceleration if available
+
+breathing_detection:
+  analysis_duration: 12  # seconds
+  sift_threshold: 0.3
+  breathing_rate_range: [12, 20]  # breaths per minute
+  min_motion_amplitude: 2.0  # pixels
+  enabled: true
+
+emergency:
+  countdown_duration: 10  # seconds
+  contact_number: "999"
+  enable_actual_call: false  # Set true for production
+  manual_trigger: true  # Allow manual emergency via Button 1
+  auto_trigger: true  # Allow automatic trigger from fall detection
+  notification_methods:
+    - "log"
+    - "web_alert"
+    # - "sms"  # Uncomment when configured
+    # - "call"  # Uncomment when configured
+
+storage:
+  images_directory: "data/images"
+  database_path: "data/database.db"
+  max_images: 5000  # Maximum images before cleanup
+  auto_cleanup: true
+  cleanup_strategy: "fifo"  # First-In-First-Out
+  cleanup_threshold: 0.85  # Start cleanup at 85% of max_images
+  keep_fall_images: true  # Always preserve fall detection images
+  keep_emergency_images: true  # Always preserve emergency event images
+  cleanup_days: 7  # Delete normal images older than 7 days
+  image_quality: 85
+  image_format: "jpg"
+  disk_space_threshold: 0.90  # Cleanup if disk usage > 90%
+
+network:
+  wifi_ssid: "ElderlyMonitor-RDK"
+  wifi_password: "elderly2024"
+  wifi_channel: 6
+  mdns_name: "elderlysystem"
+  flask_host: "0.0.0.0"
+  flask_port: 5000
+  flask_debug: false
+
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  log_file: "data/logs/system.log"
+  max_log_size: 10485760  # 10 MB
+  backup_count: 5
