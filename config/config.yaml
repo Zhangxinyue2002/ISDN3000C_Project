@@ -11,11 +11,11 @@ camera:
   capture_interval: 2  # Seconds between captures
 
 gpio:
-  button_call_999: 17  # Button 1: Call emergency
-  button_stop_call: 27  # Button 2: Stop/cancel emergency call
-  led_fall: 22
-  led_emergency: 23
-  bounce_time: 200  # milliseconds
+  button_call_999: 11  # Physical Pin 11 (GPIO17) - Button 1: Call emergency
+  button_stop_call: 13  # Physical Pin 13 (GPIO27) - Button 2: Stop/cancel
+  led_fall: 31         # Physical Pin 31 (GPIO6) - Fall indicator LED
+  led_emergency: 33    # Physical Pin 33 (PWM0) - Emergency status LED
+  bounce_time: 200     # milliseconds
 
 fall_detection:
   model_path: "models/fall_detection.pt"
