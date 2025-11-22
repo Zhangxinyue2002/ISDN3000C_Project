@@ -73,9 +73,11 @@ class GPIOHandler:
         GPIO.setup(self.pin_led_fall, GPIO.OUT)
         GPIO.setup(self.pin_led_emergency, GPIO.OUT)
         
-        # Setup button pins as inputs with pull-down resistors
-        GPIO.setup(self.pin_button_call, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
-        GPIO.setup(self.pin_button_stop, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
+        # Setup button pins as inputs
+        # Hobot.GPIO doesn't support pull_up_down parameter
+        # Use external pull-down resistors in hardware
+        GPIO.setup(self.pin_button_call, GPIO.IN)
+        GPIO.setup(self.pin_button_stop, GPIO.IN)
         
         # Initialize LEDs to OFF
         GPIO.output(self.pin_led_fall, GPIO.LOW)
