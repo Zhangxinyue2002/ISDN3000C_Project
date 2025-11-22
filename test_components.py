@@ -159,8 +159,11 @@ class ComponentTester:
         print(f"\nTotal images: {stats['total_images']}")
         print(f"Storage used: {stats['total_size_mb']:.2f} MB")
         print(f"Category breakdown:")
-        for category, count in stats['category_counts'].items():
-            print(f"  - {category}: {count}")
+        if 'by_category' in stats and stats['by_category']:
+            for category, count in stats['by_category'].items():
+                print(f"  - {category}: {count}")
+        else:
+            print(f"  - normal: {stats['total_images']}")
         
         print("\n✓ Storage stats test complete!")
     
