@@ -10,7 +10,8 @@ import signal
 import yaml
 
 # Add src to path
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+src_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'src')
+sys.path.insert(0, src_path)
 
 from database import Database
 from gpio_handler import GPIOHandler
