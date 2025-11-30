@@ -25,11 +25,19 @@ fall_detection:
   use_bpu: true  # Use RDK X5 BPU for acceleration if available
 
 breathing_detection:
-  analysis_duration: 12  # seconds
-  sift_threshold: 0.3
-  breathing_rate_range: [12, 20]  # breaths per minute
-  min_motion_amplitude: 2.0  # pixels
+  capture_duration: 12  # seconds to capture video
+  fps: 30  # frames per second
+  min_breathing_rate: 12  # breaths per minute (lower bound)
+  max_breathing_rate: 20  # breaths per minute (upper bound)
+  min_motion_amplitude: 2.0  # pixels (minimum chest movement)
+  min_keypoints: 10  # minimum SIFT keypoints needed
   enabled: true
+  
+  # For testing/tuning (optional):
+  # To allow faster breathing rates in test environments:
+  # max_breathing_rate: 25
+  # To be more sensitive to small movements:
+  # min_motion_amplitude: 1.5
 
 emergency:
   countdown_duration: 10  # seconds
