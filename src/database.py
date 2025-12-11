@@ -14,6 +14,8 @@ class Database:
         """Initialize database connection."""
         self.db_path = db_path
         self.conn = None
+        # Ensure directory exists
+        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
         self.init_database()
     
     def init_database(self):
@@ -102,22 +104,33 @@ class Database:
         self.conn.commit()
         return cursor.lastrowid
     
-    def get_images(self, category=None, limit=None):
+    def get_images(self, category=None, limit=None, offset=None, order='desc'):
         """Query images with optional filters."""
         cursor = self.conn.cursor()
         
+        order_clause = 'DESC' if order.lower() == 'desc' else 'ASC'
+        
         if category:
-            query = 'SELECT * FROM images WHERE category = ? ORDER BY timestamp DESC'
+            query = f'SELECT * FROM images WHERE category = ? ORDER BY timestamp {order_clause}'
             params = (category,)
         else:
-            query = 'SELECT * FROM images ORDER BY timestamp DESC'
+            query = f'SELECT * FROM images ORDER BY timestamp {order_clause}'
             params = ()
         
         if limit:
             query += f' LIMIT {limit}'
         
+        if offset:
+            query += f' OFFSET {offset}'
+        
         cursor.execute(query, params)
         return cursor.fetchall()
+    
+    def get_image_by_id(self, image_id):
+        """Get a specific image by ID."""
+        cursor = self.conn.cursor()
+        cursor.execute('SELECT * FROM images WHERE id = ?', (image_id,))
+        return cursor.fetchone()
     
     def get_image_count(self):
         """Get total number of images."""

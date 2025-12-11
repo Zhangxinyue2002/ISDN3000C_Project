@@ -13,9 +13,9 @@ import yaml
 src_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'src')
 sys.path.insert(0, src_path)
 
-from database import Database
-from gpio_handler import GPIOHandler
-from camera_service import CameraService
+from src.database import Database
+from src.gpio_handler import GPIOHandler
+from src.camera_service import CameraService
 
 
 class ComponentTester:

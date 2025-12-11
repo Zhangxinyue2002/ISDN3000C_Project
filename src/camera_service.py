@@ -39,25 +39,29 @@ class CameraService:
         if self.cap is not None and self.cap.isOpened():
             return True
         
-        self.cap = cv2.VideoCapture(0)  # Try /dev/video0
+        # Try multiple camera indices
+        camera_indices = [0, 1, 8, 10]
         
-        if not self.cap.isOpened():
-            print("Trying /dev/video8...")
-            self.cap = cv2.VideoCapture(8)  # Try /dev/video8 (common on RDK)
-        
-        if self.cap.isOpened():
-            # Set camera properties
-            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.camera_config['resolution'][0])
-            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.camera_config['resolution'][1])
-            self.cap.set(cv2.CAP_PROP_FPS, self.camera_config['framerate'])
+        for idx in camera_indices:
+            print(f"Trying /dev/video{idx}...")
+            self.cap = cv2.VideoCapture(idx)
             
-            print(f"Camera opened successfully")
-            print(f"  Actual resolution: {int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))}x{int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))}")
-            print(f"  Actual FPS: {int(self.cap.get(cv2.CAP_PROP_FPS))}")
-            return True
-        else:
-            print("ERROR: Failed to open camera!")
-            return False
+            if self.cap.isOpened():
+                # Set camera properties
+                self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.camera_config['resolution'][0])
+                self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.camera_config['resolution'][1])
+                self.cap.set(cv2.CAP_PROP_FPS, self.camera_config['framerate'])
+                
+                print(f"✓ Camera opened successfully on /dev/video{idx}")
+                print(f"  Actual resolution: {int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))}x{int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))}")
+                print(f"  Actual FPS: {int(self.cap.get(cv2.CAP_PROP_FPS))}")
+                return True
+            else:
+                self.cap.release()
+                self.cap = None
+        
+        print("ERROR: Failed to open camera on any device!")
+        return False
     
     def start_continuous_capture(self):
         """Start continuous photo capture mode."""

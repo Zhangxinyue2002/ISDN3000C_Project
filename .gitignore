@@ -77,3 +77,9 @@ temp/
 !data/images/.gitkeep
 !data/logs/.gitkeep
 !models/.gitkeep
+
+
+ARCHITECTURE.md
+CHECKLIST.md
+
+images/

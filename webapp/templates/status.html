@@ -1,0 +1,264 @@
+{% extends "base.html" %}
+
+{% block title %}System Status - Elderly Fall Detection System{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-8">
+        <h1><i class="bi bi-activity"></i> System Status</h1>
+        <p class="text-muted">Real-time monitoring of the fall detection system</p>
+    </div>
+    <div class="col-md-4 text-end">
+        <button class="btn btn-primary" onclick="refreshStatus()">
+            <i class="bi bi-arrow-clockwise"></i> Refresh
+        </button>
+    </div>
+</div>
+
+<!-- System Status Cards -->
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="bi bi-gear"></i> System Components</h5>
+            </div>
+            <div class="card-body">
+                <table class="table table-borderless mb-0">
+                    <tr>
+                        <td><strong>System Status:</strong></td>
+                        <td><span id="systemRunning" class="badge bg-secondary">Unknown</span></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Camera:</strong></td>
+                        <td><span id="cameraStatus" class="badge bg-secondary">Unknown</span></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Fall Detector:</strong></td>
+                        <td><span id="fallDetectorStatus" class="badge bg-secondary">Unknown</span></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Emergency State:</strong></td>
+                        <td><span id="emergencyState" class="badge bg-secondary">Unknown</span></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Uptime:</strong></td>
+                        <td id="systemUptime">--</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0"><i class="bi bi-bar-chart"></i> Statistics</h5>
+            </div>
+            <div class="card-body">
+                <table class="table table-borderless mb-0">
+                    <tr>
+                        <td><strong>Images Captured:</strong></td>
+                        <td id="imagesCaptured">0</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Falls Detected:</strong></td>
+                        <td id="fallsDetected">0</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Emergencies Triggered:</strong></td>
+                        <td id="emergenciesTriggered">0</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Storage Used:</strong></td>
+                        <td id="storageUsed">0 MB</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Last Update:</strong></td>
+                        <td id="lastUpdate">--</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Events -->
+<div class="card mb-4">
+    <div class="card-header bg-warning">
+        <h5 class="mb-0"><i class="bi bi-clock-history"></i> Recent Events</h5>
+    </div>
+    <div class="card-body">
+        <div id="eventsLoading" class="text-center py-3">
+            <div class="spinner-border spinner-border-sm text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <span class="ms-2">Loading events...</span>
+        </div>
+        
+        <div id="eventsTable" style="display: none;">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Event Type</th>
+                            <th>Details</th>
+                        </tr>
+                    </thead>
+                    <tbody id="eventsTableBody">
+                        <!-- Events will be loaded here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <div id="noEvents" class="text-center py-3" style="display: none;">
+            <p class="text-muted">No recent events</p>
+        </div>
+    </div>
+</div>
+
+<!-- Hardware Status -->
+<div class="card">
+    <div class="card-header bg-success text-white">
+        <h5 class="mb-0"><i class="bi bi-cpu"></i> Hardware Information</h5>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-6">
+                <h6>GPIO Configuration</h6>
+                <ul class="list-unstyled">
+                    <li><i class="bi bi-circle-fill text-primary"></i> Button 1 (Call 999): Pin {{ config.gpio.button_call_999 }}</li>
+                    <li><i class="bi bi-circle-fill text-primary"></i> Button 2 (Stop Call): Pin {{ config.gpio.button_stop_call }}</li>
+                    <li><i class="bi bi-circle-fill text-danger"></i> LED 1 (Fall): Pin {{ config.gpio.led_fall }}</li>
+                    <li><i class="bi bi-circle-fill text-warning"></i> LED 2 (Emergency): Pin {{ config.gpio.led_emergency }}</li>
+                </ul>
+            </div>
+            <div class="col-md-6">
+                <h6>Camera Configuration</h6>
+                <ul class="list-unstyled">
+                    <li><i class="bi bi-camera-fill"></i> Resolution: {{ config.camera.resolution[0] }}×{{ config.camera.resolution[1] }}</li>
+                    <li><i class="bi bi-hourglass-split"></i> Capture Interval: {{ config.camera.capture_interval }}s</li>
+                    <li><i class="bi bi-speedometer2"></i> Frame Rate: {{ config.camera.framerate }} FPS</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// Load status on page load
+$(document).ready(function() {
+    loadStatus();
+    loadEvents();
+    
+    // Auto-refresh every 5 seconds
+    setInterval(loadStatus, 5000);
+    setInterval(loadEvents, 10000);
+});
+
+function loadStatus() {
+    $.get('/api/status')
+        .done(function(response) {
+            if (response.success) {
+                updateStatusDisplay(response.status);
+            }
+        })
+        .fail(function(xhr) {
+            console.error('Failed to load status:', xhr);
+            showError(
+                'Cannot load system status at the moment.<br><br>' +
+                '<strong>What you can do:</strong><br>' +
+                '• Check if the detection system is running<br>' +
+                '• Refresh the page to try again<br>' +
+                '• Make sure the web server has access to the database',
+                'Status Unavailable'
+            );
+        });
+}
+
+function updateStatusDisplay(status) {
+    // System components
+    $('#systemRunning').removeClass().addClass('badge').addClass(
+        status.running ? 'bg-success' : 'bg-danger'
+    ).text(status.running ? 'Running' : 'Stopped');
+    
+    $('#cameraStatus').removeClass().addClass('badge').addClass(
+        status.camera_active ? 'bg-success' : 'bg-danger'
+    ).text(status.camera_active ? 'Active' : 'Inactive');
+    
+    $('#fallDetectorStatus').removeClass().addClass('badge').addClass(
+        status.fall_detector_active ? 'bg-success' : 'bg-warning'
+    ).text(status.fall_detector_active ? 'Active' : 'Mock Mode');
+    
+    $('#emergencyState').removeClass().addClass('badge').addClass(
+        status.emergency_state === 'idle' ? 'bg-success' : 
+        status.emergency_state === 'emergency_active' ? 'bg-danger' : 'bg-warning'
+    ).text(status.emergency_state.replace('_', ' ').toUpperCase());
+    
+    // Statistics
+    $('#imagesCaptured').text(status.images_captured || 0);
+    $('#fallsDetected').text(status.falls_detected || 0);
+    $('#emergenciesTriggered').text(status.emergencies_triggered || 0);
+    $('#storageUsed').text((status.storage_used_mb || 0).toFixed(1) + ' MB');
+    
+    // Uptime
+    const uptimeHours = Math.floor(status.uptime_seconds / 3600);
+    const uptimeMinutes = Math.floor((status.uptime_seconds % 3600) / 60);
+    $('#systemUptime').text(`${uptimeHours}h ${uptimeMinutes}m`);
+    
+    // Last update
+    const lastUpdate = new Date(status.last_update);
+    $('#lastUpdate').text(lastUpdate.toLocaleTimeString());
+}
+
+function loadEvents() {
+    $('#eventsLoading').show();
+    $('#eventsTable').hide();
+    $('#noEvents').hide();
+    
+    $.get('/api/events?limit=20')
+        .done(function(response) {
+            $('#eventsLoading').hide();
+            
+            if (response.success && response.events.length > 0) {
+                displayEvents(response.events);
+                $('#eventsTable').show();
+            } else {
+                $('#noEvents').show();
+            }
+        })
+        .fail(function(xhr) {
+            $('#eventsLoading').hide();
+            $('#noEvents').show();
+            console.error('Failed to load events:', xhr);
+            // Silent fail - show "no events" message instead of error modal
+        });
+}
+
+function displayEvents(events) {
+    const tbody = $('#eventsTableBody');
+    tbody.empty();
+    
+    events.forEach(function(event) {
+        const time = new Date(event.timestamp).toLocaleString();
+        const eventType = event.event_type.replace(/_/g, ' ').toUpperCase();
+        
+        const row = $('<tr>')
+            .append($('<td>').text(time))
+            .append($('<td>').text(eventType))
+            .append($('<td>').text(event.details || '-'));
+        
+        tbody.append(row);
+    });
+}
+
+function refreshStatus() {
+    loadStatus();
+    loadEvents();
+}
+</script>
+{% endblock %}
