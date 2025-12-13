@@ -85,9 +85,9 @@ class EmergencyController:
         self.countdown_active = False
         self.countdown_time_remaining = 0
         
-        # Fall duration tracking (for 2-minute fall scenario)
+        # Fall duration tracking (for 1-minute fall scenario)
         self.fall_start_time = None
-        self.fall_duration_threshold = 120  # 2 minutes in seconds
+        self.fall_duration_threshold = self.config.get('fall_duration_threshold', 60)  # 1 minute in seconds
         self.fall_monitor_thread = None
         self.monitoring_fall = False
         
@@ -235,10 +235,10 @@ class EmergencyController:
     
     def _monitor_fall_duration(self):
         """
-        Monitor if person has been fallen for 2+ minutes.
-        If yes, trigger breathing detection to check if person needs help.
+        Monitor if person has been fallen for 1+ minute.
+        If yes, trigger emergency countdown even if breathing.
         """
-        logger.info(f"Fall duration monitor started. Will check breathing after {self.fall_duration_threshold}s")
+        logger.info(f"Fall duration monitor started. Will trigger countdown after {self.fall_duration_threshold}s")
         
         while self.monitoring_fall:
             elapsed = time.time() - self.fall_start_time
@@ -248,15 +248,14 @@ class EmergencyController:
             if int(elapsed) % 30 == 0 and int(elapsed) > 0:
                 logger.info(f"Fall duration: {elapsed:.0f}s / {self.fall_duration_threshold}s")
             
-            # Check if 2 minutes elapsed
+            # Check if 1 minute elapsed
             if elapsed >= self.fall_duration_threshold:
                 logger.warning(f"⚠️  FALL DURATION EXCEEDED {self.fall_duration_threshold}s!")
-                logger.warning("Triggering breathing check...")
+                logger.warning("Triggering emergency countdown (fall > 1 minute)...")
                 
-                # Set state to indicate breathing check needed
-                # Main system will detect this state and perform breathing check
-                self.set_state(EmergencyState.CHECKING_BREATHING, "Fall duration exceeded - checking breathing")
-                self.monitoring_fall = False  # Stop monitoring, breathing check will take over
+                # Trigger countdown after 1 minute fall, even if breathing
+                self.monitoring_fall = False
+                self.start_countdown(f"Fall duration exceeded {self.fall_duration_threshold}s")
                 break
             
             # Check every second
@@ -295,14 +294,18 @@ class EmergencyController:
         
         if breathing_detected:
             logger.info(f"✓ Breathing detected (confidence: {confidence:.2f})")
-            logger.info("Person appears to be breathing normally - no emergency")
-            self.set_state(EmergencyState.IDLE, "Breathing detected, false alarm")
-            self.false_alarm_count += 1
+            logger.info("Person is breathing - monitoring fall duration (1 minute threshold)")
+            # Continue monitoring - if fall persists 1 min, will still trigger countdown
+            # Keep state as FALL_DETECTED, monitoring continues
+            if self.state == EmergencyState.CHECKING_BREATHING:
+                self.set_state(EmergencyState.FALL_DETECTED, "Breathing OK, monitoring duration")
         else:
             logger.warning(f"✗ NO BREATHING DETECTED!")
-            logger.warning(f"Starting {self.countdown_duration}s emergency countdown...")
+            logger.warning(f"Starting {self.countdown_duration}s emergency countdown immediately...")
             logger.warning("LED2 will flash - Press Button 2 to cancel!")
             self.set_state(EmergencyState.NO_BREATHING, "No breathing detected")
+            # Stop fall monitoring since we're triggering countdown immediately
+            self.monitoring_fall = False
             self.start_countdown("No breathing detected after fall")
     
     def start_countdown(self, reason: str = "Emergency countdown started"):
@@ -385,6 +388,32 @@ class EmergencyController:
         self.set_state(EmergencyState.IDLE, "Returned to normal monitoring")
         
         self.false_alarm_count += 1
+    
+    def reset_to_idle(self, reason: str = "User reset system"):
+        """
+        Reset entire system to IDLE state.
+        Button 2 pressed - highest priority, resets everything.
+        Stops all monitoring, countdowns, and emergency states.
+        Turns off all LEDs.
+        
+        Args:
+            reason: Reason for reset
+        """
+        logger.warning(f"🔄 SYSTEM RESET: {reason}")
+        
+        # Stop all active processes
+        self.countdown_active = False
+        self.monitoring_fall = False
+        self.fall_start_time = None
+        self.countdown_time_remaining = 0
+        
+        # Log to database
+        if self.db:
+            self.db.add_event('system_reset', reason)
+        
+        # Return to IDLE
+        self.set_state(EmergencyState.IDLE, reason)
+        logger.info("System reset complete - back to monitoring mode")
     
     def trigger_emergency(self, manual: bool = False):
         """

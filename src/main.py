@@ -125,17 +125,13 @@ class ElderlyFallDetectionSystem:
         self.emergency.trigger_emergency(manual=True)
     
     def _on_cancel_emergency(self):
-        """Handle cancel button press."""
-        logger.info("🟢 CANCEL BUTTON PRESSED")
+        """Handle cancel button press - highest priority, resets everything."""
+        logger.warning("🟢 BUTTON 2 PRESSED - SYSTEM RESET")
         
-        if self.emergency.countdown_active:
-            logger.info("Cancelling emergency countdown...")
-            self.emergency.cancel_countdown("User pressed cancel button")
-        elif self.emergency.state == EmergencyState.EMERGENCY_ACTIVE:
-            logger.info("Resolving active emergency...")
-            self.emergency.resolve_emergency("User pressed cancel button")
-        else:
-            logger.info("No active emergency to cancel")
+        # Button 2 has highest priority - always reset to IDLE
+        # Turns off LED1 and LED2, stops all monitoring
+        self.emergency.reset_to_idle("User pressed Button 2 (reset)")
+        logger.info("All LEDs OFF - System back to fall detection mode")
     
     def _on_emergency_state_change(self, new_state: EmergencyState, old_state: EmergencyState):
         """
@@ -197,11 +193,9 @@ class ElderlyFallDetectionSystem:
                                 
                                 # Handle based on current emergency state
                                 if self.emergency.state == EmergencyState.IDLE:
-                                    # New fall detected - notify emergency controller (starts 2-minute monitoring)
+                                    # New fall detected - check breathing immediately
                                     self.emergency.handle_fall_detected(result['confidence'])
-                                elif self.emergency.state == EmergencyState.CHECKING_BREATHING:
-                                    # 2 minutes passed, emergency controller wants breathing check
-                                    logger.info("Performing breathing check after 2-minute fall...")
+                                    logger.info("Fall detected - checking breathing immediately...")
                                     self._check_breathing(result)
                                 else:
                                     logger.debug(f"Fall continues (state: {self.emergency.state.value})")

@@ -41,7 +41,7 @@ breathing_detection:
 
 emergency:
   countdown_duration: 10  # seconds (LED2 flashes during this time)
-  fall_duration_threshold: 120  # seconds (2 minutes) - triggers countdown after fall persists
+  fall_duration_threshold: 60  # seconds (1 minute) - triggers countdown after fall persists
   contact_number: "999"
   enable_actual_call: false  # Set true for production
   manual_trigger: true  # Allow manual emergency via Button 1 (LED2 solid immediately, no flash)
