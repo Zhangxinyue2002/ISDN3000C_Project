@@ -78,11 +78,42 @@ temp/
 !data/logs/.gitkeep
 !models/.gitkeep
 
-
+# Ignore detailed/redundant documentation - keep only essential docs
+# KEEP: README.md, SYSTEM_UPDATE_DEC14.md, QUICK_REFERENCE.md, TIMING_REFERENCE.md, WIRING_DIAGRAM.md, QUICK_START.md
 ARCHITECTURE.md
 CHECKLIST.md
+INTEGRATED_SYSTEM_GUIDE.md
+INTEGRATION_COMPLETE.md
+VISUAL_FLOW_GUIDE.md
+EMERGENCY_SYSTEM_GUIDE.md
+BREATHING_MODULE_COMPLETE.md
+BREATHING_DETECTION_GUIDE.md
+BREATHING_RDK_GUIDE.md
+BREATHING_TEST_REPORT.md
+CAMERA_WEB_TEST_GUIDE.md
+CHEST_BBOX_GUIDE.md
+FALL_DETECTION_MODEL_GUIDE.md
+IMPLEMENTATION_GUIDE.md
+IMPLEMENTATION_SUMMARY.md
+PHASE1_COMPLETE.md
+PROJECT_COMPLETION.md
+PROJECT_OVERVIEW.md
+RDK_SETUP.md
+RDK_X5_NOTES.md
+START_HERE.md
+NEXT_STEPS.md
 
+# Ignore image folders and test files
 images/
 PHOTO/
 *.jpg
+*.png
 Test/
+test_*.py
+capture_test_frame.py
+preview_camera.py
+demo_breathing.py
+
+# Ignore example/demo scripts
+examples/
+demos/
