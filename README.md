@@ -12,10 +12,13 @@ An AI-powered monitoring system that detects falls, monitors breathing, and prov
 
 This system uses a Raspberry Pi (RDK) with camera, AI models, and sensors to:
 - ✅ **Detect falls** using YOLOv8 pose detection
-- ✅ **Monitor breathing** using SIFT motion detection
-- ✅ **Trigger emergency calls** with manual override capability
+- ✅ **Monitor breathing** using SIFT motion detection (integrated verification)
+- ✅ **Trigger emergency calls** with 10-second countdown and manual override
 - ✅ **Provide web gallery** for captured images with WiFi access
 - ✅ **Real-time alerts** using LEDs and buttons
+
+### 🔄 **NEW: Integrated Fall + Breathing Detection**
+The system now performs automatic breathing checks after detecting a 2-minute fall, preventing false alarms before triggering emergency calls. See [INTEGRATED_SYSTEM_GUIDE.md](INTEGRATED_SYSTEM_GUIDE.md) for complete details.
 
 ---
 
@@ -431,22 +434,31 @@ If using a breadboard, follow this layout:
 
 ### System Scenarios
 
-#### Scenario 1: Fall Detected for 2+ Minutes
+#### Scenario 1: Fall with Breathing (False Alarm)
 1. **Fall detected** → LED 1 turns **ON**
-2. System monitors fall duration
-3. **After 2 minutes** → LED 2 starts **FLASHING** (10s countdown)
-4. **User can cancel**: Press Button 2 → Both LEDs **OFF**
-5. **If not cancelled**: LED 2 goes **SOLID** → Calling 999
+2. System monitors fall duration (2 minutes)
+3. **After 2 minutes** → System checks breathing (12 seconds)
+4. **Breathing detected** → LED 1 **OFF** (false alarm, no emergency)
 
-#### Scenario 2: Manual Emergency (Button 1)
-1. **User presses Button 1** → LED 2 **SOLID** immediately (no flashing)
+#### Scenario 2: Fall WITHOUT Breathing (Emergency)
+1. **Fall detected** → LED 1 turns **ON**
+2. System monitors fall duration (2 minutes)
+3. **After 2 minutes** → System checks breathing (12 seconds)
+4. **No breathing detected** → LED 2 starts **FLASHING** (10s countdown)
+5. **User can cancel**: Press Button 2 → Both LEDs **OFF**
+6. **If not cancelled**: LED 2 goes **SOLID** → Calling 999
+
+#### Scenario 3: Manual Emergency (Button 1)
+1. **User presses Button 1** → LED 2 **SOLID** immediately (no countdown)
 2. Calling 999 directly
 3. **Press Button 2** → LED 2 **OFF**, emergency cancelled
 
-#### Scenario 3: False Alarm Cancel
-1. Fall detected → LED 1 **ON**, LED 2 **FLASHING**
+#### Scenario 4: Cancel During Countdown
+1. Fall detected → Breathing check → No breathing → LED 2 **FLASHING**
 2. **Press Button 2** → Both LEDs **OFF**
 3. System returns to normal monitoring
+
+📘 **For complete system flow details, see [INTEGRATED_SYSTEM_GUIDE.md](INTEGRATED_SYSTEM_GUIDE.md)**
 
 ### Testing the Hardware
 
@@ -524,24 +536,30 @@ Camera → Capture (every 2s) → Database
 
 ### Data Flow
 
-#### Automatic Fall Detection Flow
-1. Camera captures image every 2 seconds
+#### Integrated Fall + Breathing Detection Flow
+1. **Camera captures** image every 2 seconds
 2. Image saved to database as "normal"
-3. YOLOv8 analyzes image for falls
-4. If fall detected:
+3. **YOLOv8 analyzes** image for falls
+4. If **fall detected**:
    - Database updated to category="fall"
    - **LED 1 turns ON**
-   - System monitors fall duration
+   - System monitors fall duration (2 minutes)
 5. If fall persists for **2+ minutes**:
-   - **LED 2 starts FLASHING** (10-second countdown)
-   - Press **Button 2** to cancel
-   - If not cancelled: **LED 2 goes SOLID** → Calling 999
+   - **Breathing check** automatically triggered (12 seconds)
+   - System captures video and analyzes chest movement
+   - **If breathing detected**: 
+     - LED 1 turns **OFF** (false alarm)
+     - Return to normal monitoring
+   - **If NO breathing detected**:
+     - **LED 2 starts FLASHING** (10-second countdown)
+     - Press **Button 2** to cancel
+     - If not cancelled: **LED 2 goes SOLID** → Calling 999
 6. During emergency:
    - Press **Button 2** to stop call → Both LEDs **OFF**
 
 #### Manual Emergency Flow
 1. User presses **Button 1** (emergency button)
-2. **LED 2 goes SOLID immediately** (no flashing, no countdown)
+2. **LED 2 goes SOLID immediately** (no countdown, bypasses all checks)
 3. Calling 999 directly
 4. Press **Button 2** to cancel → LED 2 **OFF**
 

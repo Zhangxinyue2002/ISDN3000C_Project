@@ -236,9 +236,9 @@ class EmergencyController:
     def _monitor_fall_duration(self):
         """
         Monitor if person has been fallen for 2+ minutes.
-        If yes, trigger emergency countdown.
+        If yes, trigger breathing detection to check if person needs help.
         """
-        logger.info(f"Fall duration monitor started. Will trigger emergency after {self.fall_duration_threshold}s")
+        logger.info(f"Fall duration monitor started. Will check breathing after {self.fall_duration_threshold}s")
         
         while self.monitoring_fall:
             elapsed = time.time() - self.fall_start_time
@@ -251,10 +251,12 @@ class EmergencyController:
             # Check if 2 minutes elapsed
             if elapsed >= self.fall_duration_threshold:
                 logger.warning(f"⚠️  FALL DURATION EXCEEDED {self.fall_duration_threshold}s!")
-                logger.warning("Starting emergency countdown...")
+                logger.warning("Triggering breathing check...")
                 
-                # Trigger emergency countdown (will flash LED for 10s)
-                self.start_countdown("Fall duration exceeded 2 minutes")
+                # Set state to indicate breathing check needed
+                # Main system will detect this state and perform breathing check
+                self.set_state(EmergencyState.CHECKING_BREATHING, "Fall duration exceeded - checking breathing")
+                self.monitoring_fall = False  # Stop monitoring, breathing check will take over
                 break
             
             # Check every second
@@ -299,8 +301,9 @@ class EmergencyController:
         else:
             logger.warning(f"✗ NO BREATHING DETECTED!")
             logger.warning(f"Starting {self.countdown_duration}s emergency countdown...")
+            logger.warning("LED2 will flash - Press Button 2 to cancel!")
             self.set_state(EmergencyState.NO_BREATHING, "No breathing detected")
-            self.start_countdown()
+            self.start_countdown("No breathing detected after fall")
     
     def start_countdown(self, reason: str = "Emergency countdown started"):
         """

@@ -35,32 +35,70 @@ class CameraService:
         print(f"  Images directory: {self.images_dir}")
     
     def open_camera(self):
-        """Open camera device."""
+        """Open camera device with multiple fallback methods."""
         if self.cap is not None and self.cap.isOpened():
             return True
         
-        # Try multiple camera indices
+        # Try multiple camera indices and backends
         camera_indices = [0, 1, 8, 10]
         
-        for idx in camera_indices:
-            print(f"Trying /dev/video{idx}...")
-            self.cap = cv2.VideoCapture(idx)
-            
-            if self.cap.isOpened():
-                # Set camera properties
-                self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.camera_config['resolution'][0])
-                self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.camera_config['resolution'][1])
-                self.cap.set(cv2.CAP_PROP_FPS, self.camera_config['framerate'])
-                
-                print(f"✓ Camera opened successfully on /dev/video{idx}")
-                print(f"  Actual resolution: {int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))}x{int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))}")
-                print(f"  Actual FPS: {int(self.cap.get(cv2.CAP_PROP_FPS))}")
-                return True
-            else:
-                self.cap.release()
-                self.cap = None
+        # Try different backends (some work better on different systems)
+        backends_to_try = [
+            ("default", None),
+            ("CAP_FFMPEG", cv2.CAP_FFMPEG),
+            ("CAP_V4L2", cv2.CAP_V4L2),
+            ("CAP_V4L", cv2.CAP_V4L),
+        ]
         
-        print("ERROR: Failed to open camera on any device!")
+        for idx in camera_indices:
+            for backend_name, backend_id in backends_to_try:
+                try:
+                    print(f"Trying /dev/video{idx} with {backend_name}...")
+                    
+                    # Open camera with or without backend specification
+                    if backend_id is None:
+                        self.cap = cv2.VideoCapture(idx)
+                    else:
+                        self.cap = cv2.VideoCapture(idx, backend_id)
+                    
+                    if self.cap.isOpened():
+                        # Try to read a test frame to verify it actually works
+                        ret, test_frame = self.cap.read()
+                        if ret and test_frame is not None:
+                            # Set camera properties
+                            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.camera_config['resolution'][0])
+                            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.camera_config['resolution'][1])
+                            self.cap.set(cv2.CAP_PROP_FPS, self.camera_config['framerate'])
+                            
+                            actual_w = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                            actual_h = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                            actual_fps = int(self.cap.get(cv2.CAP_PROP_FPS))
+                            
+                            print(f"✓ Camera opened successfully on /dev/video{idx} with {backend_name}")
+                            print(f"  Actual resolution: {actual_w}x{actual_h}")
+                            print(f"  Actual FPS: {actual_fps}")
+                            return True
+                        else:
+                            print(f"  Camera opened but can't read frames")
+                            self.cap.release()
+                            self.cap = None
+                    else:
+                        if self.cap:
+                            self.cap.release()
+                        self.cap = None
+                except Exception as e:
+                    print(f"  Error with {backend_name}: {e}")
+                    if self.cap:
+                        self.cap.release()
+                    self.cap = None
+                    continue
+        
+        print("ERROR: Failed to open camera on any device with any backend!")
+        print("\nTroubleshooting steps:")
+        print("  1. Check camera connection: ls -l /dev/video*")
+        print("  2. Check permissions: groups (should include 'video')")
+        print("  3. Test with: v4l2-ctl --list-devices")
+        print("  4. Try system OpenCV: sudo apt install python3-opencv")
         return False
     
     def start_continuous_capture(self):

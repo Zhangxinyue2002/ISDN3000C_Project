@@ -195,15 +195,16 @@ class ElderlyFallDetectionSystem:
                                                              fall_detected=True,
                                                              confidence=result['confidence'])
                                 
-                                # Only process emergency if system is idle
+                                # Handle based on current emergency state
                                 if self.emergency.state == EmergencyState.IDLE:
-                                    # Notify emergency controller
+                                    # New fall detected - notify emergency controller (starts 2-minute monitoring)
                                     self.emergency.handle_fall_detected(result['confidence'])
-                                    
-                                    # Start breathing detection sequence
+                                elif self.emergency.state == EmergencyState.CHECKING_BREATHING:
+                                    # 2 minutes passed, emergency controller wants breathing check
+                                    logger.info("Performing breathing check after 2-minute fall...")
                                     self._check_breathing(result)
                                 else:
-                                    logger.info(f"Fall detected but system busy (state: {self.emergency.state.value})")
+                                    logger.debug(f"Fall continues (state: {self.emergency.state.value})")
                             else:
                                 # Update with normal category and pose label
                                 logger.debug(f"Normal pose detected. Image ID: {image_id}, Confidence: {result['confidence']:.2f}")
