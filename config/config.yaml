@@ -40,14 +40,26 @@ breathing_detection:
   # min_motion_amplitude: 1.5
 
 emergency:
-  countdown_duration: 10  # seconds
+  countdown_duration: 10  # seconds (LED2 flashes during this time)
+  fall_duration_threshold: 120  # seconds (2 minutes) - triggers countdown after fall persists
   contact_number: "999"
   enable_actual_call: false  # Set true for production
-  manual_trigger: true  # Allow manual emergency via Button 1
-  auto_trigger: true  # Allow automatic trigger from fall detection
+  manual_trigger: true  # Allow manual emergency via Button 1 (LED2 solid immediately, no flash)
+  auto_trigger: true  # Allow automatic trigger from fall detection (LED2 flashes before solid)
   notification_methods:
     - "log"
     - "web_alert"
+  
+  # LED Behavior:
+  # LED1 (Fall Indicator): ON when fall detected, OFF when normal
+  # LED2 (Emergency Status):
+  #   - FLASHING: Countdown active (10s) - press Button 2 to cancel
+  #   - SOLID: Emergency call active (calling 999)
+  #   - OFF: Normal operation
+  #
+  # Button Behavior:
+  # Button 1: Manual emergency - LED2 goes SOLID immediately (no flashing)
+  # Button 2: Cancel/Stop - turns both LEDs OFF
     # - "sms"  # Uncomment when configured
     # - "call"  # Uncomment when configured
 

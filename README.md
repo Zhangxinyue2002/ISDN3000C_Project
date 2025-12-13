@@ -286,6 +286,219 @@ pkill -f "python.*webapp/app.py"
 
 ---
 
+## ⚡ Hardware Wiring Guide
+
+### Components Needed
+
+| Component | Quantity | Specification |
+|-----------|----------|---------------|
+| Push Buttons | 2 | Normally-open momentary switches |
+| LEDs | 2 | Any color (Red recommended) |
+| Resistors (LED) | 2 | 220Ω - 330Ω |
+| Resistors (Button) | 2 | 10kΩ pull-down |
+| Jumper Wires | 12 | Male-to-female or male-to-male |
+| Breadboard | 1 | Optional but recommended |
+
+### GPIO Pin Assignment
+
+| Component | Physical Pin | GPIO Number | Function |
+|-----------|--------------|-------------|----------|
+| Button 1 | Pin 11 | GPIO 17 | Manual emergency call (Call 999) |
+| Button 2 | Pin 13 | GPIO 27 | Cancel emergency |
+| LED 1 | Pin 22 | GPIO 25 | Fall detection indicator |
+| LED 2 | Pin 33 | GPIO 13 | Emergency status (flash/solid) |
+| GND | Pin 6, 9, 14, 20, 25, 30, 34, 39 | Ground | Common ground |
+| 3.3V | Pin 1, 17 | 3.3V Power | Power for buttons |
+
+### Wiring Instructions
+
+#### LED 1 (Fall Indicator) - Pin 22
+```
+RDK Pin 22 (GPIO 25) ──→ [220Ω Resistor] ──→ LED (+) ──→ LED (-) ──→ GND (Pin 6)
+```
+
+**Steps:**
+1. Connect Pin 22 to one end of a 220Ω resistor
+2. Connect the other end of resistor to LED's positive leg (longer leg)
+3. Connect LED's negative leg (shorter leg) to GND (Pin 6)
+
+#### LED 2 (Emergency Indicator) - Pin 33
+```
+RDK Pin 33 (GPIO 13) ──→ [220Ω Resistor] ──→ LED (+) ──→ LED (-) ──→ GND (Pin 9)
+```
+
+**Steps:**
+1. Connect Pin 33 to one end of a 220Ω resistor
+2. Connect the other end of resistor to LED's positive leg (longer leg)
+3. Connect LED's negative leg (shorter leg) to GND (Pin 9)
+
+#### Button 1 (Call 999) - Pin 11
+```
+3.3V (Pin 1) ──→ Button Terminal 1 ──→ Button Terminal 2 ──→ RDK Pin 11 (GPIO 17)
+                                            └──→ [10kΩ] ──→ GND (Pin 14)
+```
+
+**Steps:**
+1. Connect Pin 1 (3.3V) to one terminal of Button 1
+2. Connect the other terminal of Button 1 to Pin 11
+3. Connect Pin 11 to one end of 10kΩ resistor (pull-down)
+4. Connect the other end of resistor to GND (Pin 14)
+
+#### Button 2 (Cancel) - Pin 13
+```
+3.3V (Pin 1) ──→ Button Terminal 1 ──→ Button Terminal 2 ──→ RDK Pin 13 (GPIO 27)
+                                            └──→ [10kΩ] ──→ GND (Pin 20)
+```
+
+**Steps:**
+1. Connect Pin 1 (3.3V) to one terminal of Button 2
+2. Connect the other terminal of Button 2 to Pin 13
+3. Connect Pin 13 to one end of 10kΩ resistor (pull-down)
+4. Connect the other end of resistor to GND (Pin 20)
+
+### Complete Wiring Diagram
+
+```
+RDK X5 GPIO Header (40 pins)
+================================
+
+        3.3V  1 ● ● 2  5V
+    (GPIO 2)  3 ● ● 4  5V
+    (GPIO 3)  5 ● ● 6  GND ───────┐
+    (GPIO 4)  7 ● ● 8           LED1 (-)
+             GND  9 ● ●10          │
+Button1 → 11 ● ●12          └─────┘
+Button2 → 13 ● ●14  GND ──── 10kΩ (Button1)
+   (GPIO22) 15 ● ●16
+   (GPIO23) 17 ● ●18
+   (GPIO24) 19 ● ●20  GND ──── 10kΩ (Button2)
+   (GPIO25) 21 ● ●22  LED1 → (via 220Ω)
+             GND 23 ● ●24
+   (GPIO26) 25 ● ●26
+            ... ● ●...
+   (GPIO 5) 29 ● ●30  GND
+   (GPIO 6) 31 ● ●32
+    LED2 → 33 ● ●34  GND ───────┐
+   (GPIO19) 35 ● ●36          LED2 (-)
+   (GPIO16) 37 ● ●38          │
+             GND 39 ● ●40     └─────┘
+```
+
+### Breadboard Layout (Recommended)
+
+If using a breadboard, follow this layout:
+
+```
+                    BREADBOARD
+        ┌─────────────────────────────────┐
+        │                                 │
+  3.3V──┤─┬─[Button1]─┬─Pin11            │
+        │ │           │                   │
+        │ │      └────┴───[10kΩ]─GND     │
+        │ │                               │
+        │ └─[Button2]─┬─Pin13             │
+        │             │                   │
+        │        └────┴───[10kΩ]─GND     │
+        │                                 │
+  Pin22─┤─[220Ω]─[LED1+]─[LED1-]─GND    │
+        │                                 │
+  Pin33─┤─[220Ω]─[LED2+]─[LED2-]─GND    │
+        │                                 │
+        └─────────────────────────────────┘
+```
+
+### LED Behavior
+
+#### LED 1 (Fall Indicator)
+- **OFF**: Normal operation, no fall detected
+- **ON**: Fall detected, monitoring in progress
+
+#### LED 2 (Emergency Indicator)
+- **OFF**: Normal operation
+- **FLASHING**: Emergency countdown active (10 seconds) - Press Button 2 to cancel!
+- **SOLID**: Emergency call activated (calling 999)
+
+### Button Functions
+
+#### Button 1 (Manual Emergency)
+- **Press**: Immediately trigger emergency call
+- **Result**: LED 2 goes SOLID (no flashing), calls 999 directly
+
+#### Button 2 (Cancel)
+- **During countdown (LED2 flashing)**: Cancel emergency, both LEDs turn OFF
+- **During active call (LED2 solid)**: Stop emergency call, both LEDs turn OFF
+- **Otherwise**: No effect
+
+### System Scenarios
+
+#### Scenario 1: Fall Detected for 2+ Minutes
+1. **Fall detected** → LED 1 turns **ON**
+2. System monitors fall duration
+3. **After 2 minutes** → LED 2 starts **FLASHING** (10s countdown)
+4. **User can cancel**: Press Button 2 → Both LEDs **OFF**
+5. **If not cancelled**: LED 2 goes **SOLID** → Calling 999
+
+#### Scenario 2: Manual Emergency (Button 1)
+1. **User presses Button 1** → LED 2 **SOLID** immediately (no flashing)
+2. Calling 999 directly
+3. **Press Button 2** → LED 2 **OFF**, emergency cancelled
+
+#### Scenario 3: False Alarm Cancel
+1. Fall detected → LED 1 **ON**, LED 2 **FLASHING**
+2. **Press Button 2** → Both LEDs **OFF**
+3. System returns to normal monitoring
+
+### Testing the Hardware
+
+After wiring, test each component:
+
+```bash
+# Test all GPIO components
+python3 test_components.py
+```
+
+**Expected output:**
+```
+Testing LED 1 (Fall)... ✓
+Testing LED 2 (Emergency) - Solid... ✓
+Testing LED 2 (Emergency) - Flash... ✓
+
+Now test buttons:
+- Press Button 1 to test Call 999
+- Press Button 2 to test Cancel
+```
+
+### Troubleshooting Hardware
+
+#### LEDs Not Lighting
+- **Check polarity**: Long leg (+) to resistor, short leg (-) to GND
+- **Check resistor**: Use 220-330Ω, not too high (1kΩ+)
+- **Test LED directly**: Connect LED to 3.3V via resistor to verify it works
+- **Check GPIO pin**: Run test script to verify GPIO output
+
+#### Buttons Not Working
+- **Check connections**: Ensure button is pressed to close circuit
+- **Check pull-down resistor**: Must have 10kΩ to GND
+- **Test button**: Use multimeter in continuity mode
+- **Check bounce time**: Ensure proper debouncing in config.yaml
+
+#### System Not Detecting Button Press
+```bash
+# Check GPIO states
+python3 -c "import Hobot.GPIO as GPIO; GPIO.setmode(GPIO.BOARD); GPIO.setup(11, GPIO.IN); print('Button 1:', GPIO.input(11))"
+```
+
+### Safety Notes
+
+⚠️ **Important:**
+- Never connect LEDs without resistors (will damage LED or GPIO)
+- Use 3.3V power, NOT 5V (RDK X5 GPIO is 3.3V)
+- Double-check polarity before powering on
+- Use pull-down resistors for buttons to prevent floating inputs
+- Test components individually before final assembly
+
+---
+
 ## 🏗️ System Architecture
 
 ### Hardware Components
@@ -310,17 +523,27 @@ Camera → Capture (every 2s) → Database
 ```
 
 ### Data Flow
+
+#### Automatic Fall Detection Flow
 1. Camera captures image every 2 seconds
 2. Image saved to database as "normal"
 3. YOLOv8 analyzes image for falls
 4. If fall detected:
    - Database updated to category="fall"
-   - LED 1 turns ON
-   - Breathing detection starts
-   - If no breathing: Emergency countdown (10s)
-   - LED 2 flashes during countdown
-   - Press Button 2 to cancel
-   - If timeout: Call 999 activated
+   - **LED 1 turns ON**
+   - System monitors fall duration
+5. If fall persists for **2+ minutes**:
+   - **LED 2 starts FLASHING** (10-second countdown)
+   - Press **Button 2** to cancel
+   - If not cancelled: **LED 2 goes SOLID** → Calling 999
+6. During emergency:
+   - Press **Button 2** to stop call → Both LEDs **OFF**
+
+#### Manual Emergency Flow
+1. User presses **Button 1** (emergency button)
+2. **LED 2 goes SOLID immediately** (no flashing, no countdown)
+3. Calling 999 directly
+4. Press **Button 2** to cancel → LED 2 **OFF**
 
 ---
 

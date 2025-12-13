@@ -85,6 +85,12 @@ class EmergencyController:
         self.countdown_active = False
         self.countdown_time_remaining = 0
         
+        # Fall duration tracking (for 2-minute fall scenario)
+        self.fall_start_time = None
+        self.fall_duration_threshold = 120  # 2 minutes in seconds
+        self.fall_monitor_thread = None
+        self.monitoring_fall = False
+        
         # Callbacks
         self.on_emergency_triggered_callback = None
         self.on_state_change_callback = None
@@ -133,6 +139,31 @@ class EmergencyController:
             except Exception as e:
                 logger.error(f"Error in state change callback: {e}")
     
+    def trigger_emergency(self, manual: bool = False):
+        """
+        Trigger emergency immediately.
+        
+        Args:
+            manual: True if triggered by button press (no countdown/flashing)
+                   False if triggered by system (countdown applies)
+        """
+        if manual:
+            # Manual button press - go directly to EMERGENCY_ACTIVE (no flashing)
+            logger.warning("🔴 MANUAL EMERGENCY TRIGGERED - Calling 999 immediately!")
+            self.emergency_count += 1
+            
+            # Stop any ongoing fall monitoring
+            self.monitoring_fall = False
+            
+            # Go directly to emergency active state (LED2 solid, no flashing)
+            self.set_state(EmergencyState.EMERGENCY_ACTIVE, "Manual emergency button pressed")
+            
+            # Make the call
+            self._make_emergency_call(manual=True)
+        else:
+            # Automatic trigger - use countdown
+            self.start_countdown("Automatic emergency trigger")
+    
     def _update_leds(self):
         """Update LED states based on current emergency state."""
         if not self.gpio:
@@ -177,6 +208,7 @@ class EmergencyController:
     def handle_fall_detected(self, fall_confidence: float = 0.0):
         """
         Handle fall detection event.
+        Starts 2-minute monitoring - if fall persists for 2+ minutes, triggers emergency.
         
         Args:
             fall_confidence: Confidence score from fall detector
@@ -190,8 +222,62 @@ class EmergencyController:
             return
         
         logger.warning(f"🚨 FALL DETECTED! Confidence: {fall_confidence:.2f}")
+        logger.info("Starting 2-minute fall monitoring...")
+        
         self.set_state(EmergencyState.FALL_DETECTED, 
                       f"Fall detected with confidence {fall_confidence:.2f}")
+        
+        # Start 2-minute fall duration monitor
+        self.fall_start_time = time.time()
+        self.monitoring_fall = True
+        self.fall_monitor_thread = threading.Thread(target=self._monitor_fall_duration, daemon=True)
+        self.fall_monitor_thread.start()
+    
+    def _monitor_fall_duration(self):
+        """
+        Monitor if person has been fallen for 2+ minutes.
+        If yes, trigger emergency countdown.
+        """
+        logger.info(f"Fall duration monitor started. Will trigger emergency after {self.fall_duration_threshold}s")
+        
+        while self.monitoring_fall:
+            elapsed = time.time() - self.fall_start_time
+            remaining = self.fall_duration_threshold - elapsed
+            
+            # Log every 30 seconds
+            if int(elapsed) % 30 == 0 and int(elapsed) > 0:
+                logger.info(f"Fall duration: {elapsed:.0f}s / {self.fall_duration_threshold}s")
+            
+            # Check if 2 minutes elapsed
+            if elapsed >= self.fall_duration_threshold:
+                logger.warning(f"⚠️  FALL DURATION EXCEEDED {self.fall_duration_threshold}s!")
+                logger.warning("Starting emergency countdown...")
+                
+                # Trigger emergency countdown (will flash LED for 10s)
+                self.start_countdown("Fall duration exceeded 2 minutes")
+                break
+            
+            # Check every second
+            time.sleep(1)
+            
+            # Stop if person recovered (state changed back to IDLE)
+            if self.state == EmergencyState.IDLE:
+                logger.info("Person recovered, stopping fall monitor")
+                self.monitoring_fall = False
+                break
+        
+        logger.info("Fall duration monitor stopped")
+    
+    def stop_fall_monitoring(self):
+        """
+        Stop fall duration monitoring (person recovered).
+        """
+        if self.monitoring_fall:
+            logger.info("Stopping fall duration monitoring - person recovered")
+            self.monitoring_fall = False
+            self.fall_start_time = None
+            if self.fall_monitor_thread:
+                self.fall_monitor_thread = None
     
     def handle_breathing_result(self, breathing_detected: bool, confidence: float = 0.0):
         """
@@ -216,45 +302,60 @@ class EmergencyController:
             self.set_state(EmergencyState.NO_BREATHING, "No breathing detected")
             self.start_countdown()
     
-    def start_countdown(self):
-        """Start emergency countdown timer."""
+    def start_countdown(self, reason: str = "Emergency countdown started"):
+        """
+        Start emergency countdown timer.
+        LED2 will flash for countdown_duration (10s), then if not cancelled, trigger emergency.
+        
+        Args:
+            reason: Reason for starting countdown
+        """
         if self.countdown_active:
             logger.warning("Countdown already active")
             return
         
+        # Stop fall monitoring if active
+        self.monitoring_fall = False
+        
         self.countdown_active = True
         self.countdown_time_remaining = self.countdown_duration
-        self.set_state(EmergencyState.COUNTDOWN_ACTIVE, 
-                      f"Starting {self.countdown_duration}s countdown")
+        self.set_state(EmergencyState.COUNTDOWN_ACTIVE, reason)
         
         # Start countdown in separate thread
         self.countdown_thread = threading.Thread(target=self._countdown_worker, daemon=True)
         self.countdown_thread.start()
     
     def _countdown_worker(self):
-        """Countdown worker thread."""
-        logger.info(f"Countdown started: {self.countdown_duration} seconds")
+        """Countdown worker thread. LED2 flashes during this time."""
+        logger.info(f"⏱️  Countdown started: {self.countdown_duration} seconds")
+        logger.info("LED2 flashing... Press Button 2 to cancel!")
         
         for i in range(self.countdown_duration, 0, -1):
             if not self.countdown_active:
-                logger.info("Countdown cancelled")
+                logger.info("Countdown cancelled by user")
                 return
             
             self.countdown_time_remaining = i
             
             if i <= 5:  # Log final 5 seconds
-                logger.warning(f"Emergency call in {i}...")
+                logger.warning(f"🚨 Emergency call in {i}...")
             
             time.sleep(1)
         
-        # Countdown completed
+        # Countdown completed - trigger emergency (LED2 goes solid)
         if self.countdown_active:
-            logger.warning("⚠️  COUNTDOWN EXPIRED - TRIGGERING EMERGENCY CALL")
-            self.trigger_emergency()
+            logger.warning("⏰ COUNTDOWN EXPIRED - TRIGGERING EMERGENCY CALL")
+            self.countdown_active = False  # Reset flag
+            
+            # Trigger emergency without manual flag (goes through automatic flow)
+            self.emergency_count += 1
+            self.set_state(EmergencyState.EMERGENCY_ACTIVE, "Countdown expired")
+            self._make_emergency_call(manual=False)
     
-    def cancel_countdown(self, reason: str = "User cancelled"):
+    def cancel_countdown(self, reason: str = "User pressed cancel button"):
         """
         Cancel active countdown.
+        Both LEDs turn off when cancelled.
         
         Args:
             reason: Reason for cancellation
@@ -263,9 +364,12 @@ class EmergencyController:
             logger.warning("No active countdown to cancel")
             return
         
-        logger.info(f"❌ Countdown cancelled: {reason}")
+        logger.info(f"✅ Countdown cancelled: {reason}")
         self.countdown_active = False
         self.countdown_time_remaining = 0
+        
+        # Stop fall monitoring if active
+        self.monitoring_fall = False
         
         self.set_state(EmergencyState.COUNTDOWN_CANCELLED, reason)
         
@@ -273,34 +377,37 @@ class EmergencyController:
         if self.countdown_thread and self.countdown_thread.is_alive():
             self.countdown_thread.join(timeout=2)
         
-        # Return to idle after brief delay
-        time.sleep(1)
+        # Return to idle (both LEDs off)
+        time.sleep(0.5)
         self.set_state(EmergencyState.IDLE, "Returned to normal monitoring")
         
         self.false_alarm_count += 1
     
     def trigger_emergency(self, manual: bool = False):
         """
-        Trigger emergency call.
+        Trigger emergency immediately.
         
         Args:
-            manual: True if manually triggered via button
+            manual: True if triggered by button press (no countdown/flashing)
+                   False if triggered by system (countdown applies)
         """
-        if manual and not self.manual_trigger_enabled:
-            logger.info("Manual trigger disabled")
-            return
-        
-        logger.critical("🚨🚨🚨 EMERGENCY TRIGGERED 🚨🚨🚨")
-        logger.critical(f"Calling {self.contact_number}...")
-        
-        self.countdown_active = False
-        self.set_state(EmergencyState.EMERGENCY_ACTIVE, 
-                      "Manual trigger" if manual else "Automatic trigger")
-        
-        self.emergency_count += 1
-        
-        # Make the call
-        self._make_emergency_call(manual)
+        if manual:
+            # Manual button press - go directly to EMERGENCY_ACTIVE (no flashing)
+            logger.warning("🔴 MANUAL EMERGENCY TRIGGERED - Calling 999 immediately!")
+            self.emergency_count += 1
+            
+            # Stop any ongoing fall monitoring
+            self.monitoring_fall = False
+            
+            # Go directly to emergency active state (LED2 solid, no flashing)
+            self.set_state(EmergencyState.EMERGENCY_ACTIVE, "Manual emergency button pressed")
+            
+            # Make the call
+            self._make_emergency_call(manual=True)
+        else:
+            # This should not be called directly for automatic triggers
+            # Automatic triggers go through start_countdown() -> _countdown_worker()
+            logger.warning("trigger_emergency called with manual=False - use start_countdown() instead")
         
         # Notify callback
         if self.on_emergency_triggered_callback:
@@ -335,9 +442,10 @@ class EmergencyController:
                 details=f"{trigger_type} emergency call to {self.contact_number}"
             )
     
-    def resolve_emergency(self, reason: str = "Emergency resolved"):
+    def resolve_emergency(self, reason: str = "User pressed cancel button"):
         """
-        Resolve active emergency.
+        Resolve active emergency (turn off emergency LED).
+        Both LEDs turn off.
         
         Args:
             reason: Reason for resolution
@@ -346,11 +454,15 @@ class EmergencyController:
             logger.warning(f"No active emergency to resolve (current state: {self.state.value})")
             return
         
-        logger.info(f"Emergency resolved: {reason}")
+        logger.info(f"✅ Emergency resolved: {reason}")
+        
+        # Stop fall monitoring if active
+        self.monitoring_fall = False
+        
         self.set_state(EmergencyState.EMERGENCY_RESOLVED, reason)
         
-        # Return to idle after brief delay
-        time.sleep(2)
+        # Return to idle (both LEDs off)
+        time.sleep(0.5)
         self.set_state(EmergencyState.IDLE, "Returned to normal monitoring")
     
     def get_status(self) -> dict:
