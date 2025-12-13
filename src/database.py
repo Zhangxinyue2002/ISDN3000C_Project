@@ -132,6 +132,16 @@ class Database:
         cursor.execute('SELECT * FROM images WHERE id = ?', (image_id,))
         return cursor.fetchone()
     
+    def update_image_category(self, image_id, category, fall_detected=False, confidence=None):
+        """Update an image's category and fall detection status."""
+        cursor = self.conn.cursor()
+        cursor.execute('''
+            UPDATE images 
+            SET category = ?, fall_detected = ?, confidence = ?, preserved = ?
+            WHERE id = ?
+        ''', (category, fall_detected, confidence, fall_detected, image_id))
+        self.conn.commit()
+    
     def get_image_count(self):
         """Get total number of images."""
         cursor = self.conn.cursor()
@@ -186,7 +196,10 @@ class Database:
         # Strategy 2: If still over threshold, delete oldest normal images (FIFO)
         current_count -= deleted_count
         if current_count > threshold_count:
-            num_to_delete = current_count - threshold_count
+            # Delete extra images to create buffer and prevent constant cleanup
+            # Delete to 75% of max instead of exactly at threshold
+            target_count = int(max_images * 0.75)
+            num_to_delete = max(current_count - target_count, 100)  # Delete at least 100 or enough to reach 75%
             
             cursor.execute('''
                 SELECT id, filepath FROM images 
@@ -248,6 +261,53 @@ class Database:
         stats['total_size_mb'] = total_size / (1024 * 1024)
         
         return stats
+    
+    def get_statistics(self):
+        """
+        Get comprehensive statistics for web interface.
+        
+        Returns:
+            Dictionary with statistics including:
+            - total_images: Total number of images
+            - falls_detected: Number of fall images
+            - emergencies: Number of emergency-triggered images
+            - normal_images: Number of normal images
+            - storage_mb: Storage used in MB
+        """
+        cursor = self.conn.cursor()
+        
+        # Total images
+        cursor.execute('SELECT COUNT(*) FROM images')
+        total_images = cursor.fetchone()[0]
+        
+        # Falls detected (where fall_detected=1 OR category='fall')
+        cursor.execute('SELECT COUNT(*) FROM images WHERE fall_detected = 1 OR category = ?', ('fall',))
+        falls_detected = cursor.fetchone()[0]
+        
+        # Emergencies triggered
+        cursor.execute('SELECT COUNT(*) FROM images WHERE emergency_triggered = 1')
+        emergencies = cursor.fetchone()[0]
+        
+        # Normal images
+        cursor.execute('SELECT COUNT(*) FROM images WHERE category = ? AND fall_detected = 0', ('normal',))
+        normal_images = cursor.fetchone()[0]
+        
+        # Storage used
+        cursor.execute('SELECT filepath FROM images')
+        total_size = 0
+        for (filepath,) in cursor.fetchall():
+            if os.path.exists(filepath):
+                total_size += os.path.getsize(filepath)
+        storage_mb = total_size / (1024 * 1024)
+        
+        return {
+            'total_images': total_images,
+            'falls_detected': falls_detected,
+            'emergencies': emergencies,
+            'normal_images': normal_images,
+            'storage_mb': round(storage_mb, 2)
+        }
+
     
     def close(self):
         """Close database connection."""

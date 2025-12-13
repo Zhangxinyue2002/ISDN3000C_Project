@@ -5,7 +5,7 @@
 
 let currentFilters = {
     category: '',
-    limit: 50,
+    limit: 20,
     offset: 0,
     order: 'desc'
 };
@@ -131,9 +131,9 @@ function displayImages(images) {
             .addClass('img-fluid lazy-load')
             .css('background', '#f0f0f0');
         
-        // Load image immediately for first 20, lazy load rest
+        // Load image immediately for first 10, lazy load rest
         const imageIndex = images.indexOf(image);
-        if (imageIndex < 20) {
+        if (imageIndex < 10) {
             img.attr('src', `/api/image/${image.id}`);
         }
         
@@ -169,41 +169,43 @@ function displayImages(images) {
  * Show image in modal
  */
 function showImageModal(imageId) {
-    $.get('/api/images')
+    // Get single image metadata efficiently
+    $.get(`/api/image/${imageId}/info`)
         .done(function(response) {
-            if (response.success) {
-                const image = response.images.find(img => img.id === imageId);
+            if (response.success && response.image) {
+                const image = response.image;
                 
-                if (image) {
-                    $('#modalImage').attr('src', `/api/image/${imageId}`);
-                    $('#imageModalTitle').text(image.filename);
-                    
-                    // Build details
-                    let details = `
-                        <table class="table table-sm">
-                            <tr><th>Filename:</th><td>${image.filename}</td></tr>
-                            <tr><th>Timestamp:</th><td>${new Date(image.timestamp).toLocaleString()}</td></tr>
-                            <tr><th>Category:</th><td>${image.category}</td></tr>
-                            <tr><th>Fall Detected:</th><td>${image.fall_detected ? 'Yes' : 'No'}</td></tr>
-                    `;
-                    
-                    if (image.confidence !== null) {
-                        details += `<tr><th>Confidence:</th><td>${(image.confidence * 100).toFixed(1)}%</td></tr>`;
-                    }
-                    
-                    if (image.breathing_detected !== null) {
-                        details += `<tr><th>Breathing:</th><td>${image.breathing_detected ? 'Yes' : 'No'}</td></tr>`;
-                    }
-                    
-                    details += '</table>';
-                    
-                    $('#imageDetails').html(details);
-                    
-                    // Show modal
-                    const modal = new bootstrap.Modal(document.getElementById('imageModal'));
-                    modal.show();
+                $('#modalImage').attr('src', `/api/image/${imageId}`);
+                $('#imageModalTitle').text(image.filename);
+                
+                // Build details
+                let details = `
+                    <table class="table table-sm">
+                        <tr><th>Filename:</th><td>${image.filename}</td></tr>
+                        <tr><th>Timestamp:</th><td>${new Date(image.timestamp).toLocaleString()}</td></tr>
+                        <tr><th>Category:</th><td>${image.category}</td></tr>
+                        <tr><th>Fall Detected:</th><td>${image.fall_detected ? 'Yes' : 'No'}</td></tr>
+                `;
+                
+                if (image.confidence !== null) {
+                    details += `<tr><th>Confidence:</th><td>${(image.confidence * 100).toFixed(1)}%</td></tr>`;
                 }
+                
+                if (image.breathing_detected !== null) {
+                    details += `<tr><th>Breathing:</th><td>${image.breathing_detected ? 'Yes' : 'No'}</td></tr>`;
+                }
+                
+                details += '</table>';
+                
+                $('#imageDetails').html(details);
+                
+                // Show modal
+                const modal = new bootstrap.Modal(document.getElementById('imageModal'));
+                modal.show();
             }
+        })
+        .fail(function() {
+            alert('Failed to load image details');
         });
 }
 
@@ -236,11 +238,11 @@ function confirmReset() {
 function resetFilters() {
     $('#categoryFilter').val('');
     $('#sortOrder').val('desc');
-    $('#limitSelect').val('50');
+    $('#limitSelect').val('20');
     
     currentFilters = {
         category: '',
-        limit: 50,
+        limit: 20,
         offset: 0,
         order: 'desc'
     };
@@ -320,8 +322,8 @@ function updateStatistics() {
                 
                 $('#totalImages').text(stats.total_images || 0);
                 $('#fallsDetected').text(stats.falls_detected || 0);
-                $('#emergencies').text(stats.emergencies_triggered || 0);
-                $('#storageSize').text((stats.total_size_mb || 0).toFixed(1) + ' MB');
+                $('#emergencies').text(stats.emergencies || 0);
+                $('#storageSize').text((stats.storage_mb || 0).toFixed(1) + ' MB');
             }
         })
         .fail(function(xhr) {

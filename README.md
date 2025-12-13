@@ -408,8 +408,8 @@ Connect components to GPIO pins:
 |-----------|----------|--------------|
 | Button 1  | GPIO 17  | Pin 11       |
 | Button 2  | GPIO 27  | Pin 13       |
-| LED 1     | GPIO 22  | Pin 15       |
-| LED 2     | GPIO 23  | Pin 16       |
+| LED 1     | GPIO 22  | Pin 31       |
+| LED 2     | GPIO 23  | Pin 33       |
 | Camera    | CSI Port | Camera Port  |
 
 *Use appropriate resistors: 220Ω for LEDs, 10kΩ pull-down for buttons*

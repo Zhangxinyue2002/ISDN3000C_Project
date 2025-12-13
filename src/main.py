@@ -29,7 +29,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from src.database import Database
 from src.gpio_handler import GPIOHandler
 from src.camera_service import CameraService
-from src.fall_detector_pose import FallDetectorPose
+from src.fall_detector_enhanced import FallDetectorEnhanced
 from src.breathing_detector import BreathingDetector
 from src.emergency_controller import EmergencyController, EmergencyState
 
@@ -71,6 +71,7 @@ class ElderlyFallDetectionSystem:
         self.running = False
         self.monitoring_thread = None
         self.fall_check_interval = self.config['fall_detection'].get('check_interval', 0.5)
+        self.last_processed_image_id = 0  # Track last processed image for fall detection
         
         # Initialize components
         logger.info("\n1. Initializing database...")
@@ -85,9 +86,9 @@ class ElderlyFallDetectionSystem:
         self.camera = CameraService(self.config, self.db)
         logger.info("   ✓ Camera ready")
         
-        logger.info("\n4. Initializing fall detector...")
-        self.fall_detector = FallDetectorPose()
-        logger.info("   ✓ Fall detector ready")
+        logger.info("\n4. Initializing enhanced fall detector...")
+        self.fall_detector = FallDetectorEnhanced(debug_mode=True)
+        logger.info("   ✓ Enhanced fall detector ready")
         
         logger.info("\n5. Initializing breathing detector...")
         self.breathing_detector = BreathingDetector(config_path)
@@ -153,65 +154,68 @@ class ElderlyFallDetectionSystem:
         """
         Main monitoring loop.
         
-        Continuously checks camera frames for fall detection.
+        Continuously checks saved images for fall detection.
         """
         logger.info("Starting fall detection monitoring loop...")
         
+        import cv2
         frames_checked = 0
         falls_detected = 0
         
         while self.running:
             try:
-                # Get current frame from camera
-                frame = self.camera.get_current_frame()
-                
-                if frame is None:
-                    time.sleep(0.1)
-                    continue
-                
-                # Check for fall
-                result = self.fall_detector.detect_fall(frame)
-                frames_checked += 1
-                
-                # Get the most recently saved image from database and update it with fall detection result
+                # Get the most recently saved image from database
                 recent_images = self.db.get_images(limit=1, order='desc')
+                
                 if recent_images and len(recent_images) > 0:
                     latest_image = recent_images[0]
                     image_id = latest_image[0]
+                    filepath = latest_image[2]  # filepath is at index 2
                     
-                    # Only update if we haven't processed this image yet
+                    # Only process if we haven't processed this image yet
                     if image_id > self.last_processed_image_id:
                         self.last_processed_image_id = image_id
                         
-                        # Update the image with fall detection results
-                        if result['fall_detected']:
-                            category = 'fall'
-                            falls_detected += 1
-                            logger.warning(f"🚨 FALL DETECTED! Confidence: {result['confidence']:.2f} - Pose: {result.get('pose_label', 'unknown')}")
+                        # Load the actual saved image from disk
+                        frame = cv2.imread(filepath)
+                        
+                        if frame is not None:
+                            # Run fall detection on the saved image
+                            result = self.fall_detector.detect_fall(frame)
+                            frames_checked += 1
                             
-                            # Update database
-                            self.db.update_image_category(image_id, category, 
-                                                         fall_detected=True,
-                                                         confidence=result['confidence'])
-                            
-                            # Only process emergency if system is idle
-                            if self.emergency.state == EmergencyState.IDLE:
-                                # Notify emergency controller
-                                self.emergency.handle_fall_detected(result['confidence'])
+                            # Update the image with fall detection results
+                            if result['fall_detected']:
+                                category = 'fall'
+                                falls_detected += 1
+                                logger.warning(f"🚨 FALL DETECTED! Image ID: {image_id}, Confidence: {result['confidence']:.2f} - Pose: {result.get('pose_label', 'unknown')}")
                                 
-                                # Start breathing detection sequence
-                                self._check_breathing(result)
+                                # Update database
+                                self.db.update_image_category(image_id, category, 
+                                                             fall_detected=True,
+                                                             confidence=result['confidence'])
+                                
+                                # Only process emergency if system is idle
+                                if self.emergency.state == EmergencyState.IDLE:
+                                    # Notify emergency controller
+                                    self.emergency.handle_fall_detected(result['confidence'])
+                                    
+                                    # Start breathing detection sequence
+                                    self._check_breathing(result)
+                                else:
+                                    logger.info(f"Fall detected but system busy (state: {self.emergency.state.value})")
                             else:
-                                logger.info(f"Fall detected but system busy (state: {self.emergency.state.value})")
+                                # Update with normal category and pose label
+                                logger.debug(f"Normal pose detected. Image ID: {image_id}, Confidence: {result['confidence']:.2f}")
+                                self.db.update_image_category(image_id, 'normal',
+                                                             fall_detected=False,
+                                                             confidence=result['confidence'])
                         else:
-                            # Update with normal category and pose label
-                            self.db.update_image_category(image_id, 'normal',
-                                                         fall_detected=False,
-                                                         confidence=result['confidence'])
+                            logger.warning(f"Failed to load image: {filepath}")
                 
                 # Log periodically
                 if frames_checked % 100 == 0:
-                    logger.debug(f"Frames checked: {frames_checked}, Falls detected: {falls_detected}")
+                    logger.info(f"Frames checked: {frames_checked}, Falls detected: {falls_detected}")
                 
                 # Sleep between checks
                 time.sleep(self.fall_check_interval)

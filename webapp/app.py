@@ -156,6 +156,45 @@ def api_image(image_id):
         }), 500
 
 
+@app.route('/api/image/<int:image_id>/info')
+def api_image_info(image_id):
+    """Get specific image metadata without the file."""
+    try:
+        # Get image info from database
+        image = db.get_image_by_id(image_id)
+        
+        if not image:
+            return jsonify({
+                'success': False,
+                'error': 'Image not found'
+            }), 404
+        
+        # Format image data
+        image_data = {
+            'id': image[0],
+            'filename': image[1],
+            'filepath': image[2],
+            'timestamp': image[3],
+            'category': image[4],
+            'fall_detected': bool(image[5]),
+            'breathing_detected': bool(image[6]) if image[6] is not None else None,
+            'emergency_triggered': bool(image[7]),
+            'confidence': float(image[8]) if image[8] is not None else None,
+            'preserved': bool(image[9])
+        }
+        
+        return jsonify({
+            'success': True,
+            'image': image_data
+        })
+    
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 @app.route('/api/events')
 def api_events():
     """

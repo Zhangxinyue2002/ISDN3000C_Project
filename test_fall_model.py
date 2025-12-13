@@ -22,7 +22,7 @@ os.environ['QT_QPA_PLATFORM'] = 'offscreen'
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
-from src.fall_detector_pose import FallDetectorPose
+from src.fall_detector_enhanced import FallDetectorEnhanced
 import time
 
 
@@ -50,11 +50,25 @@ def test_with_image(detector, image_path):
     print(f"   Person detected: {result['person_detected']}")
     if result['person_detected']:
         print(f"   Fall detected: {'⚠️  YES' if result['fall_detected'] else '✓ NO'}")
-        print(f"   Class: {result['class_label']}")
+        print(f"   Pose: {result['pose_label']}")
         print(f"   Confidence: {result['confidence']:.3f}")
         print(f"   Bounding box: {result['bounding_box']}")
         print(f"   Chest region: {result['chest_bbox']}")
         print(f"   Inference time: {result['inference_time']:.1f}ms")
+        
+        # Show debug info from enhanced detector
+        if 'debug_info' in result and result['debug_info']:
+            print()
+            print("🔍 Debug Information:")
+            debug = result['debug_info']
+            if 'fall_score' in debug:
+                print(f"   Fall score: {debug['fall_score']:.2f}")
+            if 'criteria_met' in debug:
+                print(f"   Criteria met: {', '.join(debug['criteria_met'])}")
+            if 'bbox_aspect_ratio' in debug:
+                print(f"   Bbox aspect ratio: {debug['bbox_aspect_ratio']:.2f}")
+            if 'body_aspect_ratio' in debug:
+                print(f"   Body aspect ratio: {debug['body_aspect_ratio']:.2f}")
     print("="*70)
     print()
     
@@ -68,7 +82,7 @@ def test_with_image(detector, image_path):
             cx1, cy1, cx2, cy2 = result['chest_bbox']
             cv2.rectangle(frame, (cx1, cy1), (cx2, cy2), (255, 255, 0), 2)
         
-        text = f"{result['class_label']} ({result['confidence']:.2f})"
+        text = f"{result['pose_label']} ({result['confidence']:.2f})"
         cv2.putText(frame, text, (x1, y1 - 10),
                    cv2.FONT_HERSHEY_SIMPLEX, 0.9, color, 2)
         
@@ -96,12 +110,12 @@ def main():
     print()
     
     # Initialize detector
-    print("📥 Initializing YOLOv8 Pose detector...")
+    print("📥 Initializing Enhanced YOLOv8 Pose detector...")
     print("   (First run will download model ~6MB - please wait)")
     print()
     
     try:
-        detector = FallDetectorPose()
+        detector = FallDetectorEnhanced(debug_mode=True)
     except Exception as e:
         print(f"❌ Error initializing detector: {e}")
         print()

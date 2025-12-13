@@ -90,6 +90,8 @@ class CameraService:
     def _capture_loop(self):
         """Internal continuous capture loop."""
         interval = self.camera_config['capture_interval']
+        consecutive_failures = 0
+        max_failures = 5
         
         while self.running:
             try:
@@ -97,6 +99,9 @@ class CameraService:
                 ret, frame = self.cap.read()
                 
                 if ret:
+                    # Reset failure counter on success
+                    consecutive_failures = 0
+                    
                     # Update current frame
                     with self.frame_lock:
                         self.current_frame = frame.copy()
@@ -107,8 +112,25 @@ class CameraService:
                     # Check storage and cleanup if needed
                     self._check_storage()
                 else:
-                    print("Failed to read frame from camera")
-                    time.sleep(1)
+                    consecutive_failures += 1
+                    print(f"Failed to read frame from camera (attempt {consecutive_failures}/{max_failures})")
+                    
+                    # Try to reconnect after multiple failures
+                    if consecutive_failures >= max_failures:
+                        print("Multiple failures detected, attempting to reconnect camera...")
+                        if self.cap:
+                            self.cap.release()
+                        
+                        time.sleep(2)
+                        
+                        if self.open_camera():
+                            print("Camera reconnected successfully")
+                            consecutive_failures = 0
+                        else:
+                            print("Failed to reconnect camera, will retry...")
+                            time.sleep(5)
+                    else:
+                        time.sleep(1)
                     continue
                 
                 # Wait for next interval
@@ -116,6 +138,7 @@ class CameraService:
                 
             except Exception as e:
                 print(f"Error in capture loop: {e}")
+                consecutive_failures += 1
                 time.sleep(1)
     
     def get_current_frame(self):

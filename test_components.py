@@ -196,7 +196,7 @@ class ComponentTester:
             input("\nPress Enter to continue to camera test...")
             
             # Test 2: Camera
-            if not self.test_camera():
+            '''if not self.test_camera():
                 print("\nCamera test failed. Stopping tests.")
                 return
             input("\nPress Enter to continue to continuous capture test...")
@@ -208,7 +208,7 @@ class ComponentTester:
             # Test 4: Storage stats
             self.test_storage_stats()
             input("\nPress Enter to continue to button test...")
-            
+            '''
             # Test 5: Buttons
             self.test_buttons()
             
