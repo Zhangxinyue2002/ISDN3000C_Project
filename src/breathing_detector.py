@@ -56,12 +56,12 @@ class BreathingDetector:
         self.min_motion_amplitude = self.config.get('min_motion_amplitude', 2.0)  # pixels
         self.capture_duration = self.config.get('capture_duration', 12)  # seconds
         self.fps = self.config.get('fps', 30)  # frames per second
-        self.min_keypoints = self.config.get('min_keypoints', 10)  # minimum keypoints needed
+        self.min_keypoints = self.config.get('min_keypoints', 5)  # minimum keypoints (lowered for clothing)
         
-        # Initialize SIFT detector
+        # Initialize SIFT detector with lower contrast threshold for better feature detection
         try:
-            self.sift = cv2.SIFT_create()
-            logger.info("SIFT detector initialized successfully")
+            self.sift = cv2.SIFT_create(contrastThreshold=0.03, edgeThreshold=15)
+            logger.info("SIFT detector initialized (optimized for chest region)")
         except Exception as e:
             logger.error(f"Failed to initialize SIFT: {e}")
             raise
@@ -215,6 +215,9 @@ class BreathingDetector:
             else:
                 gray_roi = roi
             
+            # Enhance contrast to help SIFT find features on uniform clothing
+            gray_roi = cv2.equalizeHist(gray_roi)
+            
             chest_rois.append(gray_roi)
         
         return chest_rois
@@ -238,7 +241,9 @@ class BreathingDetector:
         """
         motion_vectors = []
         
-        for i in range(1, len(rois)):
+        # Process every 3rd frame for speed (still enough for breathing rate detection)
+        frame_step = 3
+        for i in range(frame_step, len(rois), frame_step):
             # Detect keypoints in current frame
             keypoints_curr, descriptors_curr = self.sift.detectAndCompute(rois[i], None)
             
@@ -263,7 +268,8 @@ class BreathingDetector:
                     if m.distance < 0.75 * n.distance:
                         good_matches.append(m)
             
-            if len(good_matches) < self.min_keypoints:
+            # Need at least 3 good matches (lowered for better detection)
+            if len(good_matches) < 3:
                 continue
             
             # Calculate vertical motion (breathing mainly causes vertical chest movement)
@@ -301,9 +307,10 @@ class BreathingDetector:
         # Calculate motion amplitude
         motion_amplitude = np.ptp(motion_array)  # peak-to-peak amplitude
         
-        # Apply FFT
+        # Apply FFT (accounting for frame step=3)
         fft_result = np.fft.fft(motion_array)
-        frequencies = np.fft.fftfreq(len(motion_array), d=1.0/self.fps)
+        effective_fps = self.fps / 3  # We process every 3rd frame
+        frequencies = np.fft.fftfreq(len(motion_array), d=1.0/effective_fps)
         
         # Get magnitude spectrum (only positive frequencies)
         magnitude = np.abs(fft_result)

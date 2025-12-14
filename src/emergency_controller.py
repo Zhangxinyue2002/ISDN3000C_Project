@@ -237,12 +237,19 @@ class EmergencyController:
         """
         Monitor if person has been fallen for 1+ minute.
         If yes, trigger emergency countdown even if breathing.
+        PAUSES during breathing check - waits for breathing results first.
         """
         logger.info(f"Fall duration monitor started. Will trigger countdown after {self.fall_duration_threshold}s")
         
         while self.monitoring_fall:
             elapsed = time.time() - self.fall_start_time
             remaining = self.fall_duration_threshold - elapsed
+            
+            # PAUSE monitoring while checking breathing - wait for results first
+            if self.state == EmergencyState.CHECKING_BREATHING:
+                logger.debug("Fall monitor paused - waiting for breathing check to complete")
+                time.sleep(1)
+                continue
             
             # Log every 30 seconds
             if int(elapsed) % 30 == 0 and int(elapsed) > 0:
@@ -289,20 +296,23 @@ class EmergencyController:
             confidence: Confidence score from breathing detector
         """
         if self.state not in [EmergencyState.FALL_DETECTED, EmergencyState.CHECKING_BREATHING]:
-            logger.warning(f"Breathing result received in unexpected state: {self.state.value}")
+            logger.warning(f"⚠️  Breathing result received in unexpected state: {self.state.value}")
+            logger.warning("This might happen if Button 2 was pressed during breathing check")
             return
         
         if breathing_detected:
-            logger.info(f"✓ Breathing detected (confidence: {confidence:.2f})")
+            logger.warning(f"✅ BREATHING DETECTED (confidence: {confidence:.2f})")
             logger.info("Person is breathing - monitoring fall duration (1 minute threshold)")
             # Continue monitoring - if fall persists 1 min, will still trigger countdown
             # Keep state as FALL_DETECTED, monitoring continues
             if self.state == EmergencyState.CHECKING_BREATHING:
                 self.set_state(EmergencyState.FALL_DETECTED, "Breathing OK, monitoring duration")
         else:
-            logger.warning(f"✗ NO BREATHING DETECTED!")
-            logger.warning(f"Starting {self.countdown_duration}s emergency countdown immediately...")
-            logger.warning("LED2 will flash - Press Button 2 to cancel!")
+            logger.warning("="*60)
+            logger.warning(f"❌ NO BREATHING DETECTED! (confidence: {confidence:.2f})")
+            logger.warning(f"🚨 Starting {self.countdown_duration}s emergency countdown immediately...")
+            logger.warning("💡 LED2 will flash - Press Button 2 to cancel!")
+            logger.warning("="*60)
             self.set_state(EmergencyState.NO_BREATHING, "No breathing detected")
             # Stop fall monitoring since we're triggering countdown immediately
             self.monitoring_fall = False

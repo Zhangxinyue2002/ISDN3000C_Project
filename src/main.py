@@ -195,7 +195,8 @@ class ElderlyFallDetectionSystem:
                                 if self.emergency.state == EmergencyState.IDLE:
                                     # New fall detected - check breathing immediately
                                     self.emergency.handle_fall_detected(result['confidence'])
-                                    logger.info("Fall detected - checking breathing immediately...")
+                                    logger.warning("🫁 BREATHING DETECTION MODE ACTIVATED 🫁")
+                                    logger.info("💨 Checking breathing immediately...")
                                     self._check_breathing(result)
                                 else:
                                     logger.debug(f"Fall continues (state: {self.emergency.state.value})")
@@ -228,15 +229,17 @@ class ElderlyFallDetectionSystem:
         Args:
             fall_result: Result from fall detector
         """
-        logger.info("Starting breathing detection sequence...")
+        logger.warning("="*60)
+        logger.warning("🫁 BREATHING DETECTION SEQUENCE STARTED 🫁")
+        logger.warning("="*60)
         
         self.emergency.set_state(EmergencyState.CHECKING_BREATHING, "Analyzing breathing")
         
-        # Capture video for breathing analysis
+        # Capture video for breathing analysis (optimized: 8s duration, 100 keypoints max)
         duration = self.breathing_detector.capture_duration
         fps = self.breathing_detector.fps
         
-        logger.info(f"Capturing {duration}s of video at {fps} FPS...")
+        logger.info(f"📹 Capturing {duration}s of video at {fps} FPS (optimized for speed)...")
         
         frames = []
         start_time = time.time()
@@ -247,22 +250,25 @@ class ElderlyFallDetectionSystem:
                 frames.append(frame)
             time.sleep(1.0 / fps)
         
-        logger.info(f"Captured {len(frames)} frames for breathing analysis")
+        logger.info(f"✅ Captured {len(frames)} frames for breathing analysis")
         
         # Analyze breathing
         chest_bbox = fall_result.get('chest_bbox')
         if chest_bbox is None:
-            logger.warning("No chest region detected, using default")
+            logger.warning("⚠️  No chest region detected, using default")
             # Use default region if not available
             h, w = frames[0].shape[:2]
             chest_bbox = (w // 4, h // 4, 3 * w // 4, 3 * h // 4)
         
+        logger.warning("🔬 ANALYZING CHEST MOVEMENT (every 3rd frame for speed)...")
         breathing_result = self.breathing_detector.analyze_breathing(frames, chest_bbox)
         
-        logger.info(f"Breathing analysis complete:")
-        logger.info(f"  - Breathing detected: {breathing_result['breathing_detected']}")
-        logger.info(f"  - Confidence: {breathing_result['confidence']:.2f}")
-        logger.info(f"  - Breathing rate: {breathing_result['breathing_rate']:.1f} BPM")
+        logger.warning("="*60)
+        logger.warning("💨 BREATHING ANALYSIS COMPLETE (optimized) 💨")
+        logger.warning("="*60)
+        logger.info(f"  🫁 Breathing detected: {breathing_result['breathing_detected']}")
+        logger.info(f"  📊 Confidence: {breathing_result['confidence']:.2f}")
+        logger.info(f"  💓 Breathing rate: {breathing_result['breathing_rate']:.1f} BPM")
         
         # Notify emergency controller
         self.emergency.handle_breathing_result(

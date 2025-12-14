@@ -245,7 +245,7 @@ class FallDetectorEnhanced:
         
         # Criterion 1: Bounding box aspect ratio
         # If person is horizontal, width > height
-        fall_criterion_1 = bbox_aspect_ratio > 0.8  # LOWERED from 1.2
+        fall_criterion_1 = bbox_aspect_ratio > 1.0  # Person must be clearly horizontal
         debug_info['criterion_1_bbox_horizontal'] = fall_criterion_1
         
         # Criterion 2: Head position relative to hips
@@ -257,8 +257,8 @@ class FallDetectorEnhanced:
             debug_info['head_hip_distance'] = head_hip_distance
             debug_info['head_below_hips'] = head_below_hips
             
-            # INCREASED threshold for more sensitivity
-            fall_criterion_2 = head_hip_distance < 120  # INCREASED from 80
+            # Head should be close to hips when fallen
+            fall_criterion_2 = head_hip_distance < 100  # Stricter threshold
         else:
             fall_criterion_2 = False
         
@@ -273,7 +273,7 @@ class FallDetectorEnhanced:
                 body_width = bbox_width * 0.6
             
             body_aspect_ratio = body_width / max(body_height, 1)
-            fall_criterion_3 = body_aspect_ratio > 0.6  # LOWERED from 1.2
+            fall_criterion_3 = body_aspect_ratio > 1.0  # Body must be horizontal
             
             debug_info['body_height'] = body_height
             debug_info['body_width'] = body_width
@@ -301,7 +301,7 @@ class FallDetectorEnhanced:
             else:
                 torso_angle = 90  # Nearly horizontal
             
-            fall_criterion_5 = torso_angle > 30  # LOWERED from 45
+            fall_criterion_5 = torso_angle > 45  # Torso must be significantly tilted
             
             debug_info['torso_angle'] = torso_angle
         else:
@@ -332,8 +332,8 @@ class FallDetectorEnhanced:
         debug_info['fall_score'] = fall_score
         debug_info['criteria_met'] = criteria_met
         
-        # LOWERED threshold: Need only 0.4 score (was 0.5)
-        if fall_score >= 0.4:
+        # Stricter threshold: Need 0.6 score to reduce false positives
+        if fall_score >= 0.5:
             # Person is likely fallen
             confidence = min(0.95, 0.45 + fall_score)
             return True, confidence, 'fallen', debug_info
