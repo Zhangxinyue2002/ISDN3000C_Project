@@ -27,9 +27,9 @@ fall_detection:
 breathing_detection:
   capture_duration: 8  # seconds to capture video (reduced for speed)
   fps: 30  # frames per second
-  min_breathing_rate: 12  # breaths per minute (lower bound)
-  max_breathing_rate: 20  # breaths per minute (upper bound)
-  min_motion_amplitude: 2.0  # pixels (minimum chest movement)
+  min_breathing_rate: 6  # breaths per minute (very relaxed for slow breathing)
+  max_breathing_rate: 30  # breaths per minute (upper bound)
+  min_motion_amplitude: 1.7  # pixels (low threshold for low-res camera)
   min_keypoints: 10  # minimum SIFT keypoints needed
   enabled: true
   

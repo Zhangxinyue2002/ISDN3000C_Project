@@ -96,13 +96,18 @@ class Database:
     
     def add_event(self, event_type, image_id=None, details=None):
         """Log system event."""
-        cursor = self.conn.cursor()
-        cursor.execute('''
-            INSERT INTO events (event_type, image_id, details)
-            VALUES (?, ?, ?)
-        ''', (event_type, image_id, details))
-        self.conn.commit()
-        return cursor.lastrowid
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute('''
+                INSERT INTO events (event_type, image_id, details)
+                VALUES (?, ?, ?)
+            ''', (event_type, image_id, details))
+            self.conn.commit()
+            return cursor.lastrowid
+        except sqlite3.OperationalError as e:
+            # Handle case where transaction is not active
+            logger.warning(f"Database transaction error: {e}")
+            return None
     
     def get_images(self, category=None, limit=None, offset=None, order='desc'):
         """Query images with optional filters."""

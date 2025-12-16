@@ -434,14 +434,23 @@ class EmergencyController:
                    False if triggered by system (countdown applies)
         """
         if manual:
-            # Manual button press - go directly to EMERGENCY_ACTIVE (no flashing)
-            logger.warning("🔴 MANUAL EMERGENCY TRIGGERED - Calling 999 immediately!")
+            # Manual button press - ALWAYS works regardless of current state
+            # This is Button 1 - user explicitly wants to call 999
+            logger.warning(f"🔴 MANUAL EMERGENCY TRIGGERED from state: {self.state.value}")
+            
+            # If already in EMERGENCY_ACTIVE, don't duplicate
+            if self.state == EmergencyState.EMERGENCY_ACTIVE:
+                logger.info("Emergency already active - ignoring duplicate manual trigger")
+                return
+            
+            logger.warning("Calling 999 immediately!")
             self.emergency_count += 1
             
-            # Stop any ongoing fall monitoring
+            # Stop any ongoing fall monitoring and countdowns
             self.monitoring_fall = False
+            self.countdown_active = False
             
-            # Go directly to emergency active state (LED2 solid, no flashing)
+            # Go directly to emergency active state (LED1 + LED2 solid)
             self.set_state(EmergencyState.EMERGENCY_ACTIVE, "Manual emergency button pressed")
             
             # Make the call

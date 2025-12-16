@@ -89,7 +89,9 @@ start_web() {
 # Function to start main system
 start_main() {
     echo -e "${BLUE}→ Starting main detection system...${NC}"
-    python3 src/main.py &
+    echo -e "${YELLOW}  Note: GPIO requires root access. Using sudo with venv...${NC}"
+    # Use sudo with the venv's python directly to preserve packages
+    sudo -E "$PROJECT_DIR/venv/bin/python3" src/main.py &
     MAIN_PID=$!
     echo -e "${GREEN}✓ Main system started (PID: $MAIN_PID)${NC}"
     echo ""

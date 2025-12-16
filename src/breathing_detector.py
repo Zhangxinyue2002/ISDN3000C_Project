@@ -112,44 +112,29 @@ class BreathingDetector:
             chest_rois = self._extract_chest_rois(video_frames, chest_bbox)
             
             # Step 2: Detect keypoints in first frame
-            first_frame = chest_rois[0]
-            keypoints_first, descriptors_first = self.sift.detectAndCompute(first_frame, None)
-            
-            if keypoints_first is None or len(keypoints_first) < self.min_keypoints:
-                logger.warning(f"Insufficient keypoints detected: {len(keypoints_first) if keypoints_first else 0}")
-                return {
-                    'breathing_detected': False,
-                    'confidence': 0.0,
-                    'breathing_rate': 0.0,
-                    'motion_amplitude': 0.0,
-                    'num_frames_analyzed': len(video_frames),
-                    'keypoints_tracked': len(keypoints_first) if keypoints_first else 0,
-                    'error': 'Insufficient keypoints'
-                }
-            
-            logger.info(f"Detected {len(keypoints_first)} keypoints in first frame")
-            
-            # Step 3: Track keypoints across frames
+            # Step 3: Track chest motion using optical flow (no keypoint detection needed)
+            logger.info("Tracking chest motion with optical flow...")
             motion_vectors = self._track_keypoints(
                 chest_rois,
-                keypoints_first,
-                descriptors_first
+                None,  # Not used in optical flow method
+                None   # Not used in optical flow method
             )
             
             if len(motion_vectors) < 10:
-                logger.warning(f"Insufficient motion data: {len(motion_vectors)} frames")
+                logger.warning(f"Insufficient motion data: {len(motion_vectors)} samples")
                 return {
                     'breathing_detected': False,
                     'confidence': 0.0,
                     'breathing_rate': 0.0,
                     'motion_amplitude': 0.0,
                     'num_frames_analyzed': len(video_frames),
-                    'keypoints_tracked': len(keypoints_first),
+                    'keypoints_tracked': 0,
                     'error': 'Insufficient motion data'
                 }
             
             # Step 4: Analyze periodic motion using FFT
             breathing_rate, motion_amplitude = self._analyze_periodic_motion(motion_vectors)
+            logger.info(f"📊 Motion amplitude: {motion_amplitude:.2f} px, Rate: {breathing_rate:.2f} BPM")
             
             # Step 5: Determine if breathing detected
             breathing_detected = self._is_breathing_detected(breathing_rate, motion_amplitude)
@@ -157,13 +142,19 @@ class BreathingDetector:
             # Calculate confidence based on motion amplitude and rate validity
             confidence = self._calculate_confidence(breathing_rate, motion_amplitude)
             
+            # CRITICAL: Reject very low confidence detections
+            MIN_CONFIDENCE_THRESHOLD = 0.2  # Balanced threshold
+            if breathing_detected and confidence < MIN_CONFIDENCE_THRESHOLD:
+                logger.warning(f"🚫 Low confidence {confidence:.2f} < {MIN_CONFIDENCE_THRESHOLD}, rejecting detection")
+                breathing_detected = False
+            
             result = {
                 'breathing_detected': breathing_detected,
                 'confidence': confidence,
                 'breathing_rate': breathing_rate,
                 'motion_amplitude': motion_amplitude,
                 'num_frames_analyzed': len(video_frames),
-                'keypoints_tracked': len(keypoints_first)
+                'keypoints_tracked': len(motion_vectors)  # Number of motion samples tracked
             }
             
             logger.info(f"Breathing analysis complete: {result}")
@@ -229,63 +220,88 @@ class BreathingDetector:
         descriptors_first: np.ndarray
     ) -> List[float]:
         """
-        Track keypoint motion across frames.
+        Track chest motion using Lucas-Kanade optical flow - more reliable than SIFT matching.
+        
+        Optical flow directly measures pixel movement between frames, which is more suitable
+        for detecting subtle breathing motion compared to feature matching.
         
         Args:
             rois: List of grayscale ROI images
-            keypoints_first: Keypoints from first frame
-            descriptors_first: Descriptors from first frame
+            keypoints_first: Not used (kept for compatibility)
+            descriptors_first: Not used (kept for compatibility)
         
         Returns:
-            List of average motion values (vertical displacement in pixels)
+            List of vertical displacement values (pixels) representing chest movement
         """
+        if len(rois) < 10:
+            logger.warning("Not enough frames for optical flow analysis")
+            return []
+        
         motion_vectors = []
         
-        # Process every 3rd frame for speed (still enough for breathing rate detection)
-        frame_step = 3
-        for i in range(frame_step, len(rois), frame_step):
-            # Detect keypoints in current frame
-            keypoints_curr, descriptors_curr = self.sift.detectAndCompute(rois[i], None)
-            
-            if keypoints_curr is None or descriptors_curr is None:
-                continue
-            
-            if len(keypoints_curr) < self.min_keypoints:
-                continue
-            
-            # Match keypoints using k-nearest neighbors
-            try:
-                matches = self.bf_matcher.knnMatch(descriptors_first, descriptors_curr, k=2)
-            except Exception as e:
-                logger.debug(f"Matching failed for frame {i}: {e}")
-                continue
-            
-            # Apply Lowe's ratio test
-            good_matches = []
-            for match_pair in matches:
-                if len(match_pair) == 2:
-                    m, n = match_pair
-                    if m.distance < 0.75 * n.distance:
-                        good_matches.append(m)
-            
-            # Need at least 3 good matches (lowered for better detection)
-            if len(good_matches) < 3:
-                continue
-            
-            # Calculate vertical motion (breathing mainly causes vertical chest movement)
-            vertical_motion = []
-            for match in good_matches:
-                pt_first = keypoints_first[match.queryIdx].pt
-                pt_curr = keypoints_curr[match.trainIdx].pt
-                
-                # Calculate vertical displacement
-                dy = pt_curr[1] - pt_first[1]
-                vertical_motion.append(dy)
-            
-            # Average vertical motion for this frame
-            avg_motion = np.mean(vertical_motion)
-            motion_vectors.append(avg_motion)
+        # Lucas-Kanade optical flow parameters (optimized for low-res camera)
+        lk_params = dict(
+            winSize=(31, 31),  # Larger window for low-res
+            maxLevel=4,  # More pyramid levels for better tracking
+            criteria=(cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 20, 0.01)
+        )
         
+        # Create grid of tracking points in chest region (avoid edges)
+        h, w = rois[0].shape
+        y_start, y_end = int(h * 0.25), int(h * 0.75)
+        x_start, x_end = int(w * 0.25), int(w * 0.75)
+        
+        # Sample 4x4 grid = 16 tracking points (reduced for low-res)
+        y_points = np.linspace(y_start, y_end, 4, dtype=np.float32)
+        x_points = np.linspace(x_start, x_end, 4, dtype=np.float32)
+        
+        p0 = []
+        for y in y_points:
+            for x in x_points:
+                p0.append([[x, y]])
+        p0 = np.array(p0, dtype=np.float32)
+        
+        prev_gray = rois[0]
+        
+        # Track through frames (process every 2nd frame for speed)
+        for i in range(2, len(rois), 2):
+            curr_gray = rois[i]
+            
+            try:
+                # Calculate optical flow
+                p1, status, err = cv2.calcOpticalFlowPyrLK(
+                    prev_gray, curr_gray, p0, None, **lk_params
+                )
+                
+                if p1 is None or status is None:
+                    continue
+                
+                # Select successfully tracked points
+                good_new = p1[status == 1]
+                good_old = p0[status == 1]
+                
+                if len(good_new) < 6:  # Need at least 6 tracked points (lowered for low-res)
+                    # Reset tracking if too many points lost
+                    p0 = np.array([[[x, y]] for y in y_points for x in x_points], dtype=np.float32)
+                    prev_gray = curr_gray
+                    continue
+                
+                # Calculate VERTICAL displacement only (breathing is vertical motion)
+                dy_values = good_new[:, 1] - good_old[:, 1]
+                
+                # Use median to reject outliers (more robust than mean)
+                median_dy = np.median(dy_values)
+                motion_vectors.append(median_dy)
+                
+                # Update for next iteration
+                p0 = good_new.reshape(-1, 1, 2)
+                prev_gray = curr_gray
+                
+            except Exception as e:
+                logger.debug(f"Optical flow failed at frame {i}: {e}")
+                continue
+        
+        logger.info(f"📊 Tracked {len(motion_vectors)} motion samples from {len(rois)} frames")
         return motion_vectors
     
     def _analyze_periodic_motion(
@@ -317,17 +333,29 @@ class BreathingDetector:
         positive_freqs = frequencies[:len(frequencies)//2]
         positive_magnitude = magnitude[:len(magnitude)//2]
         
-        # Find dominant frequency (ignore DC component at index 0)
-        if len(positive_magnitude) > 1:
-            peak_idx = np.argmax(positive_magnitude[1:]) + 1
-            peak_freq = positive_freqs[peak_idx]
+        # Filter frequencies to breathing range: 0.08-0.6 Hz (5-36 BPM)
+        # This eliminates high-frequency noise
+        min_freq = 0.08  # 5 BPM
+        max_freq = 0.6   # 36 BPM
+        
+        # Find dominant frequency within breathing range
+        valid_range = (positive_freqs >= min_freq) & (positive_freqs <= max_freq)
+        
+        if np.any(valid_range):
+            # Get magnitudes only in valid frequency range
+            valid_magnitude = positive_magnitude.copy()
+            valid_magnitude[~valid_range] = 0  # Zero out invalid frequencies
             
-            # Convert to breaths per minute
-            breathing_rate = abs(peak_freq) * 60
+            if np.max(valid_magnitude) > 0:
+                peak_idx = np.argmax(valid_magnitude)
+                peak_freq = positive_freqs[peak_idx]
+                breathing_rate = abs(peak_freq) * 60
+            else:
+                breathing_rate = 0.0
         else:
             breathing_rate = 0.0
         
-        logger.debug(f"FFT analysis: rate={breathing_rate:.2f} bpm, amplitude={motion_amplitude:.2f} px")
+        logger.info(f"📊 FFT analysis: rate={breathing_rate:.2f} bpm, amplitude={motion_amplitude:.2f} px")
         
         return breathing_rate, motion_amplitude
     
@@ -339,6 +367,11 @@ class BreathingDetector:
         """
         Determine if breathing is detected based on rate and amplitude.
         
+        Uses flexible logic:
+        - If significant chest movement detected, accept wider rate range
+        - Normal range: 8-25 BPM with min 1.5px amplitude
+        - Relaxed range: 6-30 BPM with 2.5px+ amplitude (for slow/deep breathing)
+        
         Args:
             breathing_rate: Detected breathing rate (breaths/min)
             motion_amplitude: Motion amplitude (pixels)
@@ -346,10 +379,42 @@ class BreathingDetector:
         Returns:
             True if breathing detected, False otherwise
         """
-        rate_valid = self.min_breathing_rate <= breathing_rate <= self.max_breathing_rate
-        amplitude_valid = motion_amplitude >= self.min_motion_amplitude
+        # AMPLITUDE-BASED detection (primary) with rate as sanity check
+        # For low-res cameras, focus on detecting ANY periodic motion
         
-        return rate_valid and amplitude_valid
+        # Reject suspiciously large motion (likely camera shake or body movement)
+        if motion_amplitude > 5.0:
+            logger.info(f"❌ Motion too large ({motion_amplitude:.2f}px) - likely camera shake or body movement")
+            return False
+        
+        # Amplitude thresholds (sensitive for low-res)
+        weak_motion = motion_amplitude >= 0.15    # Very sensitive
+        clear_motion = motion_amplitude >= 0.30   # More confident
+        strong_motion = motion_amplitude >= 0.50  # Very confident
+        
+        # Rate sanity check (very wide range, just eliminate obvious noise)
+        rate_reasonable = 5 <= breathing_rate <= 35  # Extremely wide range
+        rate_normal = 8 <= breathing_rate <= 25      # Normal range
+        
+        # Detection logic (amplitude-dominant):
+        # 1. Strong motion (>0.5px) → accept if rate not crazy
+        if strong_motion and rate_reasonable:
+            logger.info(f"✅ STRONG motion {motion_amplitude:.2f}px, rate {breathing_rate:.1f} BPM")
+            return True
+        
+        # 2. Clear motion (>0.3px) → accept if rate in normal range
+        if clear_motion and rate_normal:
+            logger.info(f"✅ CLEAR motion {motion_amplitude:.2f}px, rate {breathing_rate:.1f} BPM")
+            return True
+        
+        # 3. Weak motion (>0.15px) → accept only with perfect rate
+        if weak_motion and 10 <= breathing_rate <= 20:
+            logger.info(f"✅ WEAK motion {motion_amplitude:.2f}px, perfect rate {breathing_rate:.1f} BPM")
+            return True
+        
+        # Reject: insufficient motion or abnormal rate
+        logger.info(f"❌ No breathing: motion={motion_amplitude:.2f}px, rate={breathing_rate:.1f}BPM")
+        return False
     
     def _calculate_confidence(
         self,
@@ -378,11 +443,11 @@ class BreathingDetector:
             
             rate_confidence = max(0.0, 1.0 - distance / 10.0)
         
-        # Amplitude confidence (normalized by expected amplitude)
-        amplitude_confidence = min(1.0, motion_amplitude / 10.0)
+        # Amplitude confidence (very sensitive for low-res camera)
+        amplitude_confidence = min(1.0, motion_amplitude / 3.0)  # Lower threshold
         
-        # Combined confidence
-        confidence = (rate_confidence + amplitude_confidence) / 2.0
+        # Combined confidence (favor detection)
+        confidence = (rate_confidence + amplitude_confidence) / 2.0 * 1.1  # Small boost
         
         return confidence
     

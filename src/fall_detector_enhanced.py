@@ -15,6 +15,7 @@ Date: 2025-12-11
 import cv2
 import numpy as np
 import logging
+import sys
 from typing import Dict, Tuple
 import time
 
@@ -51,12 +52,13 @@ class FallDetectorEnhanced:
             self.model_loaded = True
             logger.info("✓ YOLOv8 Pose model loaded successfully")
             
-        except ImportError:
-            logger.error("Ultralytics not installed. Run: pip install ultralytics")
+        except ImportError as e:
+            logger.error(f"Ultralytics import failed: {e}")
+            logger.error(f"Python path: {sys.path}")
             self.model_loaded = False
             return
         except Exception as e:
-            logger.error(f"Failed to load model: {e}")
+            logger.error(f"Failed to load model: {e}", exc_info=True)
             self.model_loaded = False
             return
         
@@ -361,13 +363,20 @@ class FallDetectorEnhanced:
         info = {
             'model_type': 'YOLOv8 Pose Detection (Enhanced)',
             'model_name': 'yolov8n-pose.pt',
-            'model_loaded': self.model_loaded,
-            'confidence_threshold': self.confidence_threshold,
-            'detection_method': 'enhanced_pose_analysis',
-            'num_keypoints': 17,
-            'keypoints_format': 'COCO',
-            'debug_mode': self.debug_mode
+            'model_loaded': self.model_loaded
         }
+        
+        # Only add these if model loaded successfully
+        if self.model_loaded:
+            info.update({
+                'confidence_threshold': self.confidence_threshold,
+                'detection_method': 'enhanced_pose_analysis',
+                'num_keypoints': 17,
+                'keypoints_format': 'COCO',
+                'debug_mode': self.debug_mode
+            })
+        else:
+            info['error'] = 'Model failed to load - ultralytics not installed'
         
         return info
 
