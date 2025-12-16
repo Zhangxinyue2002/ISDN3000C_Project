@@ -19,7 +19,7 @@ import yaml
 import io
 import zipfile
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -50,8 +50,30 @@ system_status = {
     'emergencies_triggered': 0,
     'storage_used_mb': 0.0,
     'uptime_seconds': 0,
-    'last_update': datetime.now().isoformat()
+    'last_update': datetime.now(timezone.utc).isoformat()
 }
+
+
+def _to_iso_utc(ts_value):
+    """Convert SQLite timestamp to ISO 8601 UTC string with timezone info for the UI."""
+    try:
+        # SQLite returns strings like '2025-12-16 08:15:30'
+        if isinstance(ts_value, str):
+            # Try common formats
+            try:
+                dt = datetime.fromisoformat(ts_value)
+            except ValueError:
+                dt = datetime.strptime(ts_value, '%Y-%m-%d %H:%M:%S')
+        elif isinstance(ts_value, datetime):
+            dt = ts_value
+        else:
+            return ts_value
+        # Assume stored time is local server time if naive
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc).isoformat()
+    except Exception:
+        return ts_value
 
 
 @app.route('/')
@@ -101,7 +123,7 @@ def api_images():
                 'id': img[0],
                 'filename': img[1],
                 'filepath': img[2],
-                'timestamp': img[3],
+                'timestamp': _to_iso_utc(img[3]),
                 'category': img[4],
                 'fall_detected': bool(img[5]),
                 'breathing_detected': img[6],
@@ -174,7 +196,7 @@ def api_image_info(image_id):
             'id': image[0],
             'filename': image[1],
             'filepath': image[2],
-            'timestamp': image[3],
+            'timestamp': _to_iso_utc(image[3]),
             'category': image[4],
             'fall_detected': bool(image[5]),
             'breathing_detected': bool(image[6]) if image[6] is not None else None,
@@ -215,7 +237,7 @@ def api_events():
             event_list.append({
                 'id': event[0],
                 'event_type': event[1],
-                'timestamp': event[2],
+                'timestamp': _to_iso_utc(event[2]),
                 'image_id': event[3],
                 'details': event[4]
             })
@@ -233,6 +255,29 @@ def api_events():
         }), 500
 
 
+@app.route('/api/stats')
+def api_stats():
+    """Get statistics for the gallery page."""
+    try:
+        stats = db.get_statistics()
+        
+        # Format for frontend
+        return jsonify({
+            'success': True,
+            'total_images': stats['total_images'],
+            'falls_detected': stats['falls_detected'],
+            'emergencies_triggered': stats['emergencies'],
+            'button1_count': stats['emergencies'],  # Button1 count = emergency count
+            'storage_used': f"{stats['storage_mb']:.1f} MB"
+        })
+    
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 @app.route('/api/status')
 def api_status():
     """Get current system status."""
@@ -240,16 +285,22 @@ def api_status():
         # Update image count
         system_status['images_captured'] = db.get_image_count()
         
-        # Update storage info
-        storage_info = get_storage_info()
-        system_status['storage_used_mb'] = storage_info['total_size_mb']
+        # Get comprehensive statistics
+        stats = db.get_statistics()
+        system_status['stats'] = {
+            'images_captured': stats['total_images'],
+            'falls_detected': stats['falls_detected'],
+            'emergencies_triggered': stats['emergencies'],
+            'storage_used': f"{stats['storage_mb']:.1f} MB"
+        }
         
         # Update timestamp
-        system_status['last_update'] = datetime.now().isoformat()
+        # Use UTC with timezone info so the UI can display accurate local time
+        system_status['last_update'] = datetime.now(timezone.utc).isoformat()
         
         return jsonify({
             'success': True,
-            'status': system_status
+            **system_status
         })
     
     except Exception as e:
@@ -324,7 +375,8 @@ def api_statistics():
 
 def get_storage_info():
     """Get storage information."""
-    images_dir = Path(config['storage']['images_directory'])
+    # Get absolute path to images directory
+    images_dir = Path(__file__).parent.parent / config['storage']['images_directory']
     
     total_size = 0
     image_count = 0
@@ -335,7 +387,7 @@ def get_storage_info():
             image_count += 1
     
     return {
-        'total_size_mb': total_size / (1024 * 1024),
+        'total_size_mb': round(total_size / (1024 * 1024), 2),
         'image_count': image_count
     }
 

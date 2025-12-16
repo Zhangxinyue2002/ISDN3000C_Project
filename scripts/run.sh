@@ -65,6 +65,12 @@ python3 -c "import flask, cv2, yaml, numpy" 2>/dev/null || {
 echo -e "${GREEN}→ Checking directories...${NC}"
 mkdir -p data/images data/logs models
 
+# Clear all images and reset database
+echo -e "${YELLOW}→ Clearing previous session data...${NC}"
+rm -f data/images/*.jpg 2>/dev/null || true
+rm -f data/database.db 2>/dev/null || true
+echo -e "${GREEN}✓ Gallery cleared, starting fresh${NC}"
+
 # Check configuration
 if [ ! -f "config/config.yaml" ]; then
     echo -e "${RED}✗ Configuration file not found: config/config.yaml${NC}"

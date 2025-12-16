@@ -23,12 +23,12 @@ function startAutoRefresh() {
         clearInterval(autoRefreshInterval);
     }
     
-    // Refresh every 3 seconds
+    // Refresh every 1 second
     autoRefreshInterval = setInterval(function() {
         if (autoRefreshEnabled) {
             checkForNewImages();
         }
-    }, 3000);
+    }, 1000);
 }
 
 /**
@@ -141,8 +141,8 @@ function displayImages(images) {
         let badge = '';
         if (image.fall_detected) {
             badge = '<span class="badge bg-danger gallery-badge">FALL</span>';
-        } else if (image.emergency_triggered) {
-            badge = '<span class="badge bg-warning gallery-badge">EMERGENCY</span>';
+        } else if (image.emergency_triggered || image.category === 'emergency') {
+            badge = '<span class="badge bg-warning text-dark gallery-badge"><i class="bi bi-exclamation-triangle-fill"></i> EMERGENCY</span>';
         }
         
         // Add timestamp
@@ -315,22 +315,41 @@ function downloadAllImages() {
  * Update statistics
  */
 function updateStatistics() {
-    $.get('/api/statistics')
+    $.get('/api/stats')
         .done(function(response) {
             if (response.success) {
-                const stats = response.statistics;
-                
-                $('#totalImages').text(stats.total_images || 0);
-                $('#fallsDetected').text(stats.falls_detected || 0);
-                $('#emergencies').text(stats.emergencies || 0);
-                $('#storageSize').text((stats.storage_mb || 0).toFixed(1) + ' MB');
+                // Animate numbers
+                animateValue("totalImages", parseInt($('#totalImages').text()) || 0, response.total_images, 800);
+                animateValue("fallsDetected", parseInt($('#fallsDetected').text()) || 0, response.falls_detected, 800);
+                animateValue("emergencies", parseInt($('#emergencies').text()) || 0, response.emergencies_triggered, 800);
             }
         })
         .fail(function(xhr) {
             console.error('Failed to load statistics:', xhr);
-            // Only show error if it's not a 404 (no stats yet) and user actively needs this info
             // Silent fail for statistics as it's not critical for user operation
         });
+}
+
+/**
+ * Animate number change
+ */
+function animateValue(id, start, end, duration) {
+    if (start === end) return;
+    const range = end - start;
+    let current = start;
+    const increment = end > start ? 1 : -1;
+    const stepTime = Math.abs(Math.floor(duration / range));
+    const obj = document.getElementById(id);
+    
+    if (!obj) return;
+    
+    const timer = setInterval(function() {
+        current += increment;
+        obj.innerHTML = current;
+        if (current == end) {
+            clearInterval(timer);
+        }
+    }, stepTime);
 }
 
 /**

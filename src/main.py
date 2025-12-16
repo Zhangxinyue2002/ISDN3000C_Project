@@ -73,6 +73,11 @@ class ElderlyFallDetectionSystem:
         self.fall_check_interval = self.config['fall_detection'].get('check_interval', 0.5)
         self.last_processed_image_id = 0  # Track last processed image for fall detection
         
+        # Emergency mode tracking
+        self.emergency_mode_active = False
+        self.emergency_mode_start = None
+        self.emergency_mode_duration = 10  # 10 seconds
+        
         # Initialize components
         logger.info("\n1. Initializing database...")
         self.db = Database(self.config['storage']['database_path'])
@@ -122,6 +127,12 @@ class ElderlyFallDetectionSystem:
     def _on_manual_emergency(self):
         """Handle manual emergency button press."""
         logger.warning("🔴 MANUAL EMERGENCY BUTTON PRESSED!")
+        logger.warning("⚠️  EMERGENCY MODE ACTIVATED - Next 10 seconds of photos will be marked as EMERGENCY")
+        
+        # Activate emergency mode for 10 seconds
+        self.emergency_mode_active = True
+        self.emergency_mode_start = time.time()
+        
         self.emergency.trigger_emergency(manual=True)
     
     def _on_cancel_emergency(self):
@@ -172,40 +183,65 @@ class ElderlyFallDetectionSystem:
                     if image_id > self.last_processed_image_id:
                         self.last_processed_image_id = image_id
                         
+                        # Check if emergency mode is still active
+                        if self.emergency_mode_active:
+                            elapsed = time.time() - self.emergency_mode_start
+                            if elapsed > self.emergency_mode_duration:
+                                self.emergency_mode_active = False
+                                logger.info("✅ Emergency mode ended (10 seconds elapsed)")
+                        
                         # Load the actual saved image from disk
                         frame = cv2.imread(filepath)
                         
                         if frame is not None:
-                            # Run fall detection on the saved image
-                            result = self.fall_detector.detect_fall(frame)
-                            frames_checked += 1
-                            
-                            # Update the image with fall detection results
-                            if result['fall_detected']:
-                                category = 'fall'
-                                falls_detected += 1
-                                logger.warning(f"🚨 FALL DETECTED! Image ID: {image_id}, Confidence: {result['confidence']:.2f} - Pose: {result.get('pose_label', 'unknown')}")
+                            # If in emergency mode, mark all photos as emergency
+                            if self.emergency_mode_active:
+                                elapsed = time.time() - self.emergency_mode_start
+                                remaining = self.emergency_mode_duration - elapsed
+                                logger.warning(f"⚠️  EMERGENCY MODE: Image {image_id} marked as EMERGENCY ({remaining:.1f}s remaining)")
                                 
-                                # Update database
-                                self.db.update_image_category(image_id, category, 
-                                                             fall_detected=True,
-                                                             confidence=result['confidence'])
+                                # Update database with emergency category
+                                cursor = self.db.conn.cursor()
+                                cursor.execute('''
+                                    UPDATE images 
+                                    SET category = 'emergency', emergency_triggered = 1, preserved = 1
+                                    WHERE id = ?
+                                ''', (image_id,))
+                                self.db.conn.commit()
                                 
-                                # Handle based on current emergency state
-                                if self.emergency.state == EmergencyState.IDLE:
-                                    # New fall detected - check breathing immediately
-                                    self.emergency.handle_fall_detected(result['confidence'])
-                                    logger.warning("🫁 BREATHING DETECTION MODE ACTIVATED 🫁")
-                                    logger.info("💨 Checking breathing immediately...")
-                                    self._check_breathing(result)
-                                else:
-                                    logger.debug(f"Fall continues (state: {self.emergency.state.value})")
+                                frames_checked += 1
                             else:
-                                # Update with normal category and pose label
-                                logger.debug(f"Normal pose detected. Image ID: {image_id}, Confidence: {result['confidence']:.2f}")
-                                self.db.update_image_category(image_id, 'normal',
-                                                             fall_detected=False,
-                                                             confidence=result['confidence'])
+                                # Normal fall detection mode
+                                # Run fall detection on the saved image
+                                result = self.fall_detector.detect_fall(frame)
+                                frames_checked += 1
+                                
+                                # Update the image with fall detection results
+                                if result['fall_detected']:
+                                    category = 'fall'
+                                    falls_detected += 1
+                                    logger.warning(f"🚨 FALL DETECTED! Image ID: {image_id}, Confidence: {result['confidence']:.2f} - Pose: {result.get('pose_label', 'unknown')}")
+                                    
+                                    # Update database
+                                    self.db.update_image_category(image_id, category, 
+                                                                 fall_detected=True,
+                                                                 confidence=result['confidence'])
+                                    
+                                    # Handle based on current emergency state
+                                    if self.emergency.state == EmergencyState.IDLE:
+                                        # New fall detected - check breathing immediately
+                                        self.emergency.handle_fall_detected(result['confidence'])
+                                        logger.warning("🫁 BREATHING DETECTION MODE ACTIVATED 🫁")
+                                        logger.info("💨 Checking breathing immediately...")
+                                        self._check_breathing(result)
+                                    else:
+                                        logger.debug(f"Fall continues (state: {self.emergency.state.value})")
+                                else:
+                                    # Update with normal category and pose label
+                                    logger.debug(f"Normal pose detected. Image ID: {image_id}, Confidence: {result['confidence']:.2f}")
+                                    self.db.update_image_category(image_id, 'normal',
+                                                                 fall_detected=False,
+                                                                 confidence=result['confidence'])
                         else:
                             logger.warning(f"Failed to load image: {filepath}")
                 

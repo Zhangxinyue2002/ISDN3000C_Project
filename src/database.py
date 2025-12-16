@@ -289,8 +289,8 @@ class Database:
         cursor.execute('SELECT COUNT(*) FROM images WHERE fall_detected = 1 OR category = ?', ('fall',))
         falls_detected = cursor.fetchone()[0]
         
-        # Emergencies triggered
-        cursor.execute('SELECT COUNT(*) FROM images WHERE emergency_triggered = 1')
+        # Emergencies triggered (emergency_triggered=1 OR category='emergency')
+        cursor.execute('SELECT COUNT(*) FROM images WHERE emergency_triggered = 1 OR category = ?', ('emergency',))
         emergencies = cursor.fetchone()[0]
         
         # Normal images
