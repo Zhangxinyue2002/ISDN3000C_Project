@@ -383,7 +383,7 @@ class BreathingDetector:
         # For low-res cameras, focus on detecting ANY periodic motion
         
         # Reject suspiciously large motion (likely camera shake or body movement)
-        if motion_amplitude > 5.0:
+        if motion_amplitude > 10.0:
             logger.info(f"❌ Motion too large ({motion_amplitude:.2f}px) - likely camera shake or body movement")
             return False
         

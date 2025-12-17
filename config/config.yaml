@@ -25,7 +25,7 @@ fall_detection:
   use_bpu: true  # Use RDK X5 BPU for acceleration if available
 
 breathing_detection:
-  capture_duration: 8  # seconds to capture video (reduced for speed)
+  capture_duration: 15  # seconds to capture video
   fps: 30  # frames per second
   min_breathing_rate: 6  # breaths per minute (very relaxed for slow breathing)
   max_breathing_rate: 30  # breaths per minute (upper bound)

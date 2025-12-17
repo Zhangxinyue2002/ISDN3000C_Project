@@ -15,72 +15,7 @@
     </div>
 </div>
 
-<!-- System Status Cards -->
-<div class="row mb-4">
-    <div class="col-md-6">
-        <div class="card">
-            <div class="card-header bg-primary text-white">
-                <h5 class="mb-0"><i class="bi bi-gear"></i> System Components</h5>
-            </div>
-            <div class="card-body">
-                <table class="table table-borderless mb-0">
-                    <tr>
-                        <td><strong>System Status:</strong></td>
-                        <td><span id="systemRunning" class="badge bg-secondary">Unknown</span></td>
-                    </tr>
-                    <tr>
-                        <td><strong>Camera:</strong></td>
-                        <td><span id="cameraStatus" class="badge bg-secondary">Unknown</span></td>
-                    </tr>
-                    <tr>
-                        <td><strong>Fall Detector:</strong></td>
-                        <td><span id="fallDetectorStatus" class="badge bg-secondary">Unknown</span></td>
-                    </tr>
-                    <tr>
-                        <td><strong>Emergency State:</strong></td>
-                        <td><span id="emergencyState" class="badge bg-secondary">Unknown</span></td>
-                    </tr>
-                    <tr>
-                        <td><strong>Uptime:</strong></td>
-                        <td id="systemUptime">--</td>
-                    </tr>
-                </table>
-            </div>
-        </div>
-    </div>
-    
-    <div class="col-md-6">
-        <div class="card">
-            <div class="card-header bg-info text-white">
-                <h5 class="mb-0"><i class="bi bi-bar-chart"></i> Statistics</h5>
-            </div>
-            <div class="card-body">
-                <table class="table table-borderless mb-0">
-                    <tr>
-                        <td><strong>Images Captured:</strong></td>
-                        <td id="imagesCaptured">0</td>
-                    </tr>
-                    <tr>
-                        <td><strong>Falls Detected:</strong></td>
-                        <td id="fallsDetected">0</td>
-                    </tr>
-                    <tr>
-                        <td><strong>Emergencies Triggered:</strong></td>
-                        <td id="emergenciesTriggered">0</td>
-                    </tr>
-                    <tr>
-                        <td><strong>Storage Used:</strong></td>
-                        <td id="storageUsed">0 MB</td>
-                    </tr>
-                    <tr>
-                        <td><strong>Last Update:</strong></td>
-                        <td id="lastUpdate">--</td>
-                    </tr>
-                </table>
-            </div>
-        </div>
-    </div>
-</div>
+
 
 <!-- Recent Events -->
 <div class="card mb-4">
@@ -155,7 +90,7 @@ $(document).ready(function() {
     loadStatus();
     loadEvents();
     
-    // Auto-refresh every 5 seconds
+    // Auto-refresh every 1 second for events
     setInterval(loadStatus, 5000);
     setInterval(loadEvents, 10000);
 });
@@ -181,38 +116,7 @@ function loadStatus() {
 }
 
 function updateStatusDisplay(status) {
-    // System components
-    $('#systemRunning').removeClass().addClass('badge').addClass(
-        status.running ? 'bg-success' : 'bg-danger'
-    ).text(status.running ? 'Running' : 'Stopped');
-    
-    $('#cameraStatus').removeClass().addClass('badge').addClass(
-        status.camera_active ? 'bg-success' : 'bg-danger'
-    ).text(status.camera_active ? 'Active' : 'Inactive');
-    
-    $('#fallDetectorStatus').removeClass().addClass('badge').addClass(
-        status.fall_detector_active ? 'bg-success' : 'bg-warning'
-    ).text(status.fall_detector_active ? 'Active' : 'Mock Mode');
-    
-    $('#emergencyState').removeClass().addClass('badge').addClass(
-        status.emergency_state === 'idle' ? 'bg-success' : 
-        status.emergency_state === 'emergency_active' ? 'bg-danger' : 'bg-warning'
-    ).text(status.emergency_state.replace('_', ' ').toUpperCase());
-    
-    // Statistics
-    $('#imagesCaptured').text(status.images_captured || 0);
-    $('#fallsDetected').text(status.falls_detected || 0);
-    $('#emergenciesTriggered').text(status.emergencies_triggered || 0);
-    $('#storageUsed').text((status.storage_used_mb || 0).toFixed(1) + ' MB');
-    
-    // Uptime
-    const uptimeHours = Math.floor(status.uptime_seconds / 3600);
-    const uptimeMinutes = Math.floor((status.uptime_seconds % 3600) / 60);
-    $('#systemUptime').text(`${uptimeHours}h ${uptimeMinutes}m`);
-    
-    // Last update
-    const lastUpdate = new Date(status.last_update);
-    $('#lastUpdate').text(lastUpdate.toLocaleTimeString());
+    // Status display elements removed - only events are shown now
 }
 
 function loadEvents() {
@@ -222,20 +126,23 @@ function loadEvents() {
     
     $.get('/api/events?limit=20')
         .done(function(response) {
+            console.log('Events API response:', response);
             $('#eventsLoading').hide();
             
-            if (response.success && response.events.length > 0) {
+            if (response.success && response.events && response.events.length > 0) {
+                console.log('Displaying', response.events.length, 'events');
                 displayEvents(response.events);
                 $('#eventsTable').show();
             } else {
+                console.log('No events found or empty response');
                 $('#noEvents').show();
             }
         })
-        .fail(function(xhr) {
+        .fail(function(xhr, status, error) {
             $('#eventsLoading').hide();
             $('#noEvents').show();
-            console.error('Failed to load events:', xhr);
-            // Silent fail - show "no events" message instead of error modal
+            console.error('Failed to load events. Status:', status, 'Error:', error);
+            console.error('Response:', xhr.responseText);
         });
 }
 

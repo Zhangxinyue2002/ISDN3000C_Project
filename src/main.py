@@ -127,11 +127,14 @@ class ElderlyFallDetectionSystem:
     def _on_manual_emergency(self):
         """Handle manual emergency button press."""
         logger.warning("🔴 MANUAL EMERGENCY BUTTON PRESSED!")
-        logger.warning("⚠️  EMERGENCY MODE ACTIVATED - Next 10 seconds of photos will be marked as EMERGENCY")
+        logger.warning("⚠️  EMERGENCY MODE ACTIVATED - All photos will be marked as EMERGENCY until Button 2 is pressed")
         
-        # Activate emergency mode for 10 seconds
+        # Activate emergency mode (no time limit, controlled by emergency state)
         self.emergency_mode_active = True
         self.emergency_mode_start = time.time()
+        
+        # Log emergency event
+        self.db.add_event('emergency_triggered', details='Manual emergency button (Button 1) pressed')
         
         self.emergency.trigger_emergency(manual=True)
     
@@ -154,8 +157,19 @@ class ElderlyFallDetectionSystem:
         """
         logger.info(f"Emergency state: {old_state.value} → {new_state.value}")
         
-        # Additional actions based on state changes can be added here
-        # For example: send notifications, update web interface, etc.
+        # When entering EMERGENCY_ACTIVE state (LED1+LED2 solid, calling 999)
+        # Activate emergency mode to mark all subsequent photos as EMERGENCY
+        if new_state == EmergencyState.EMERGENCY_ACTIVE:
+            logger.warning("🚨 EMERGENCY_ACTIVE STATE - Calling 999! All photos will be marked as EMERGENCY")
+            self.emergency_mode_active = True
+            self.emergency_mode_start = time.time()
+        
+        # When emergency is resolved or cancelled, deactivate emergency mode
+        elif new_state in [EmergencyState.IDLE, EmergencyState.EMERGENCY_RESOLVED, 
+                          EmergencyState.COUNTDOWN_CANCELLED]:
+            if self.emergency_mode_active:
+                logger.info("Emergency mode deactivated")
+                self.emergency_mode_active = False
     
     def _monitoring_loop(self):
         """
@@ -183,22 +197,14 @@ class ElderlyFallDetectionSystem:
                     if image_id > self.last_processed_image_id:
                         self.last_processed_image_id = image_id
                         
-                        # Check if emergency mode is still active
-                        if self.emergency_mode_active:
-                            elapsed = time.time() - self.emergency_mode_start
-                            if elapsed > self.emergency_mode_duration:
-                                self.emergency_mode_active = False
-                                logger.info("✅ Emergency mode ended (10 seconds elapsed)")
-                        
                         # Load the actual saved image from disk
                         frame = cv2.imread(filepath)
                         
                         if frame is not None:
-                            # If in emergency mode, mark all photos as emergency
+                            # If in emergency mode (LED1+LED2 on), mark all photos as emergency
                             if self.emergency_mode_active:
                                 elapsed = time.time() - self.emergency_mode_start
-                                remaining = self.emergency_mode_duration - elapsed
-                                logger.warning(f"⚠️  EMERGENCY MODE: Image {image_id} marked as EMERGENCY ({remaining:.1f}s remaining)")
+                                logger.warning(f"⚠️  EMERGENCY MODE: Image {image_id} marked as EMERGENCY (elapsed: {elapsed:.1f}s, press Button 2 to stop)")
                                 
                                 # Update database with emergency category
                                 cursor = self.db.conn.cursor()
@@ -226,6 +232,10 @@ class ElderlyFallDetectionSystem:
                                     self.db.update_image_category(image_id, category, 
                                                                  fall_detected=True,
                                                                  confidence=result['confidence'])
+                                    
+                                    # Log fall detected event
+                                    self.db.add_event('fall_detected', image_id=image_id, 
+                                                     details=f"Confidence: {result['confidence']:.2f}, Pose: {result.get('pose_label', 'unknown')}")
                                     
                                     # Handle based on current emergency state
                                     if self.emergency.state == EmergencyState.IDLE:

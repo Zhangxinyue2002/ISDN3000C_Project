@@ -153,12 +153,19 @@ class Database:
         cursor.execute('SELECT COUNT(*) FROM images')
         return cursor.fetchone()[0]
     
-    def get_recent_events(self, limit=20):
+    def get_recent_events(self, limit=20, event_type=None):
         """Get recent system events."""
         cursor = self.conn.cursor()
-        cursor.execute('''
-            SELECT * FROM events ORDER BY timestamp DESC LIMIT ?
-        ''', (limit,))
+        if event_type:
+            cursor.execute('''
+                SELECT * FROM events 
+                WHERE event_type = ?
+                ORDER BY timestamp DESC LIMIT ?
+            ''', (event_type, limit))
+        else:
+            cursor.execute('''
+                SELECT * FROM events ORDER BY timestamp DESC LIMIT ?
+            ''', (limit,))
         return cursor.fetchall()
     
     def cleanup_old_images(self, max_images=5000, cleanup_threshold=0.85, 

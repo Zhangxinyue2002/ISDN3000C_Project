@@ -7,7 +7,7 @@ Manages the emergency response workflow:
 3. Countdown → Can be cancelled by user
 4. Timeout → Trigger emergency call
 
-Author: ISDN3000C Project Team
+Author: Selina & Amy
 Date: 2025-12-10
 """
 
@@ -122,13 +122,6 @@ class EmergencyController:
         if reason:
             logger.info(f"  Reason: {reason}")
         
-        # Log to database
-        if self.db:
-            self.db.add_event(
-                event_type=f"emergency_state_{new_state.value}",
-                details=f"Transitioned from {self.previous_state.value}: {reason}"
-            )
-        
         # Update GPIO LEDs based on state
         self._update_leds()
         
@@ -208,7 +201,7 @@ class EmergencyController:
     def handle_fall_detected(self, fall_confidence: float = 0.0):
         """
         Handle fall detection event.
-        Starts 2-minute monitoring - if fall persists for 2+ minutes, triggers emergency.
+        Starts 1-minute monitoring - if fall persists for 1+ minutes, triggers emergency.
         
         Args:
             fall_confidence: Confidence score from fall detector
@@ -222,12 +215,12 @@ class EmergencyController:
             return
         
         logger.warning(f"🚨 FALL DETECTED! Confidence: {fall_confidence:.2f}")
-        logger.info("Starting 2-minute fall monitoring...")
+        logger.info("Starting 1-minute fall monitoring...")
         
         self.set_state(EmergencyState.FALL_DETECTED, 
                       f"Fall detected with confidence {fall_confidence:.2f}")
         
-        # Start 2-minute fall duration monitor
+        # Start 1-minute fall duration monitor
         self.fall_start_time = time.time()
         self.monitoring_fall = True
         self.fall_monitor_thread = threading.Thread(target=self._monitor_fall_duration, daemon=True)
@@ -363,6 +356,11 @@ class EmergencyController:
             logger.warning("⏰ COUNTDOWN EXPIRED - TRIGGERING EMERGENCY CALL")
             self.countdown_active = False  # Reset flag
             
+            # Log auto emergency event
+            if self.db:
+                self.db.add_event('emergency_triggered', 
+                                 details='Auto emergency: Countdown expired without cancellation')
+            
             # Trigger emergency without manual flag (goes through automatic flow)
             self.emergency_count += 1
             self.set_state(EmergencyState.EMERGENCY_ACTIVE, "Countdown expired")
@@ -485,13 +483,6 @@ class EmergencyController:
             # Simulation mode
             logger.critical(f"[{trigger_type}] SIMULATED call to {self.contact_number}")
             logger.critical("In production, this would trigger actual emergency call")
-        
-        # Log to database
-        if self.db:
-            self.db.add_event(
-                event_type="emergency_call",
-                details=f"{trigger_type} emergency call to {self.contact_number}"
-            )
     
     def resolve_emergency(self, reason: str = "User pressed cancel button"):
         """
