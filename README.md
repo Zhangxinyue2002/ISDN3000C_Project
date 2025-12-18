@@ -18,7 +18,7 @@ This system uses a Raspberry Pi (RDK) with camera, AI models, and sensors to:
 - ✅ **Real-time alerts** using LEDs and buttons
 
 ### 🔄 **NEW: Integrated Fall + Breathing Detection**
-The system now performs automatic breathing checks after detecting a 2-minute fall, preventing false alarms before triggering emergency calls. See [INTEGRATED_SYSTEM_GUIDE.md](INTEGRATED_SYSTEM_GUIDE.md) for complete details.
+The system now performs automatic breathing checks after detecting a 1-minute fall, preventing false alarms before triggering emergency calls. See [INTEGRATED_SYSTEM_GUIDE.md](INTEGRATED_SYSTEM_GUIDE.md) for complete details.
 
 ---
 
@@ -197,92 +197,13 @@ You should see:
 
 ---
 
-### Step 4: Testing Fall Detection
-
-#### 4.1 Test with Existing Images
-```bash
-# Test the fall detector with sample images
-python3 test_fall_batch.py
-```
-
-This will show you which images are detected as falls.
-
-#### 4.2 Test with Live Camera
-
-**Method 1: Point camera at a fall image**
-1. Print or display a fall image on screen
-2. Point your camera at it
-3. Wait 3-5 seconds
-4. Check the web interface - image should appear with "FALL" badge
-
-**Method 2: Live person simulation (CAREFUL!)**
-1. Have someone safely simulate a fall on soft surface
-2. Watch the web interface
-3. Image should be captured and marked as "FALL"
-
----
-
-### Step 5: Monitoring the System
-
-#### 5.1 Check Logs in Real-Time
-```bash
-# Watch live log updates
-tail -f data/logs/system.log
-```
-
-Press `Ctrl+C` to stop watching.
-
-#### 5.2 Check for Falls Detected
-```bash
-# See recent fall detections
-grep "FALL DETECTED" data/logs/system.log | tail -10
-```
-
-#### 5.3 Check System Status
-```bash
-# View status summary
-grep "System Status" data/logs/system.log | tail -5
-```
-
----
-
-### Step 6: Stopping the System
+### Step 4: Stopping the System
 
 #### 6.1 Graceful Shutdown
 ```bash
-# Method 1: Press Ctrl+C in the terminal where run.sh is running
+# Step 1: Press Ctrl+C in the terminal where run.sh is running
 
-# Method 2: Kill processes manually
-pkill -f "python.*main.py"
-pkill -f "python.*webapp/app.py"
-```
-
-#### 6.2 Verify System Stopped
-```bash
-# Check if processes are still running
-ps aux | grep python | grep -E "(main.py|app.py)"
-# Should show nothing
-```
-
----
-
-### Step 7: Daily Operation Checklist
-
-#### Morning Startup
-```bash
-cd /home/sunrise/Project/ISDN3000C_Project
-source venv/bin/activate
-./scripts/run.sh
-```
-
-#### Throughout the Day
-- ✓ Check web interface periodically
-- ✓ Monitor for fall detections
-- ✓ Check storage usage doesn't exceed 80%
-
-#### Evening Shutdown
-```bash
-# Press Ctrl+C or run:
+# Step 2: Kill processes
 pkill -f "python.*main.py"
 pkill -f "python.*webapp/app.py"
 ```
@@ -296,11 +217,10 @@ pkill -f "python.*webapp/app.py"
 | Component | Quantity | Specification |
 |-----------|----------|---------------|
 | Push Buttons | 2 | Normally-open momentary switches |
-| LEDs | 2 | Any color (Red recommended) |
-| Resistors (LED) | 2 | 220Ω - 330Ω |
-| Resistors (Button) | 2 | 10kΩ pull-down |
-| Jumper Wires | 12 | Male-to-female or male-to-male |
-| Breadboard | 1 | Optional but recommended |
+| LEDs | 2 | Any color |
+| Resistors | 4 | 220Ω |
+| Jumper Wires | At least 10 | Male-to-female |
+| Breadboard | 1 | / |
 
 ### GPIO Pin Assignment
 
@@ -308,20 +228,20 @@ pkill -f "python.*webapp/app.py"
 |-----------|--------------|-------------|----------|
 | Button 1 | Pin 11 | GPIO 17 | Manual emergency call (Call 999) |
 | Button 2 | Pin 13 | GPIO 27 | Cancel emergency |
-| LED 1 | Pin 22 | GPIO 25 | Fall detection indicator |
+| LED 1 | Pin 31 | GPIO 6 | Fall detection indicator |
 | LED 2 | Pin 33 | GPIO 13 | Emergency status (flash/solid) |
-| GND | Pin 6, 9, 14, 20, 25, 30, 34, 39 | Ground | Common ground |
+| GND | Pin 6, 9, 14, 25, 30, 34, 39 | Ground | Common ground |
 | 3.3V | Pin 1, 17 | 3.3V Power | Power for buttons |
 
 ### Wiring Instructions
 
-#### LED 1 (Fall Indicator) - Pin 22
+#### LED 1 (Fall Indicator) - Pin 31
 ```
-RDK Pin 22 (GPIO 25) ──→ [220Ω Resistor] ──→ LED (+) ──→ LED (-) ──→ GND (Pin 6)
+RDK Pin 31 (GPIO 6) ──→ [220Ω Resistor] ──→ LED (+) ──→ LED (-) ──→ GND (Pin 6)
 ```
 
 **Steps:**
-1. Connect Pin 22 to one end of a 220Ω resistor
+1. Connect Pin 31 to one end of a 220Ω resistor
 2. Connect the other end of resistor to LED's positive leg (longer leg)
 3. Connect LED's negative leg (shorter leg) to GND (Pin 6)
 
@@ -338,83 +258,34 @@ RDK Pin 33 (GPIO 13) ──→ [220Ω Resistor] ──→ LED (+) ──→ LED 
 #### Button 1 (Call 999) - Pin 11
 ```
 3.3V (Pin 1) ──→ Button Terminal 1 ──→ Button Terminal 2 ──→ RDK Pin 11 (GPIO 17)
-                                            └──→ [10kΩ] ──→ GND (Pin 14)
+                                            └──→ [220Ω] ──→ GND (Pin 14)
 ```
 
 **Steps:**
 1. Connect Pin 1 (3.3V) to one terminal of Button 1
 2. Connect the other terminal of Button 1 to Pin 11
-3. Connect Pin 11 to one end of 10kΩ resistor (pull-down)
+3. Connect Pin 11 to one end of 220Ω resistor (pull-down)
 4. Connect the other end of resistor to GND (Pin 14)
 
 #### Button 2 (Cancel) - Pin 13
 ```
 3.3V (Pin 1) ──→ Button Terminal 1 ──→ Button Terminal 2 ──→ RDK Pin 13 (GPIO 27)
-                                            └──→ [10kΩ] ──→ GND (Pin 20)
+                                            └──→ [220Ω] ──→ GND (Pin 20)
 ```
 
 **Steps:**
 1. Connect Pin 1 (3.3V) to one terminal of Button 2
 2. Connect the other terminal of Button 2 to Pin 13
-3. Connect Pin 13 to one end of 10kΩ resistor (pull-down)
+3. Connect Pin 13 to one end of 220Ω resistor (pull-down)
 4. Connect the other end of resistor to GND (Pin 20)
 
-### Complete Wiring Diagram
 
-```
-RDK X5 GPIO Header (40 pins)
-================================
-
-        3.3V  1 ● ● 2  5V
-    (GPIO 2)  3 ● ● 4  5V
-    (GPIO 3)  5 ● ● 6  GND ───────┐
-    (GPIO 4)  7 ● ● 8           LED1 (-)
-             GND  9 ● ●10          │
-Button1 → 11 ● ●12          └─────┘
-Button2 → 13 ● ●14  GND ──── 10kΩ (Button1)
-   (GPIO22) 15 ● ●16
-   (GPIO23) 17 ● ●18
-   (GPIO24) 19 ● ●20  GND ──── 10kΩ (Button2)
-   (GPIO25) 21 ● ●22  LED1 → (via 220Ω)
-             GND 23 ● ●24
-   (GPIO26) 25 ● ●26
-            ... ● ●...
-   (GPIO 5) 29 ● ●30  GND
-   (GPIO 6) 31 ● ●32
-    LED2 → 33 ● ●34  GND ───────┐
-   (GPIO19) 35 ● ●36          LED2 (-)
-   (GPIO16) 37 ● ●38          │
-             GND 39 ● ●40     └─────┘
-```
-
-### Breadboard Layout (Recommended)
-
-If using a breadboard, follow this layout:
-
-```
-                    BREADBOARD
-        ┌─────────────────────────────────┐
-        │                                 │
-  3.3V──┤─┬─[Button1]─┬─Pin11            │
-        │ │           │                   │
-        │ │      └────┴───[10kΩ]─GND     │
-        │ │                               │
-        │ └─[Button2]─┬─Pin13             │
-        │             │                   │
-        │        └────┴───[10kΩ]─GND     │
-        │                                 │
-  Pin22─┤─[220Ω]─[LED1+]─[LED1-]─GND    │
-        │                                 │
-  Pin33─┤─[220Ω]─[LED2+]─[LED2-]─GND    │
-        │                                 │
-        └─────────────────────────────────┘
-```
 
 ### LED Behavior
 
 #### LED 1 (Fall Indicator)
 - **OFF**: Normal operation, no fall detected
-- **ON**: Fall detected, monitoring in progress
+- **ON**: Fall detected
 
 #### LED 2 (Emergency Indicator)
 - **OFF**: Normal operation
@@ -425,60 +296,33 @@ If using a breadboard, follow this layout:
 
 #### Button 1 (Manual Emergency)
 - **Press**: Immediately trigger emergency call
-- **Result**: LED 2 goes SOLID (no flashing), calls 999 directly
+- **Result**: LED 1 & LED 2 goes SOLID (no flashing), calls 999 directly
 
 #### Button 2 (Cancel)
 - **During countdown (LED2 flashing)**: Cancel emergency, both LEDs turn OFF
 - **During active call (LED2 solid)**: Stop emergency call, both LEDs turn OFF
-- **Otherwise**: No effect
+- **Otherwise**: Indicate system is working or not (when program start runing --> Turn off)
 
 ### System Scenarios
 
-#### Scenario 1: Fall with Breathing (False Alarm)
+#### Scenario 1: Fall with Breathing
 1. **Fall detected** → LED 1 turns **ON**
-2. System monitors fall duration (2 minutes)
-3. **After 2 minutes** → System checks breathing (12 seconds)
-4. **Breathing detected** → LED 1 **OFF** (false alarm, no emergency)
+2. System detect breath → Is breathing → Back to fall detect mode
+3. System monitors fall duration (1 minutes) 
+4. **After 1 minutes** → LED 2 **FLASHING** for 10-sec 
+5. User not pressing Button 2 → Emergency mode (LED 2 **SOLID** )
+6. User pressing Button 2 → Back to normal (LED 1 & LED 2 **OFF** )
 
-#### Scenario 2: Fall WITHOUT Breathing (Emergency)
+#### Scenario 2: Fall WITHOUT Breathing
 1. **Fall detected** → LED 1 turns **ON**
-2. System monitors fall duration (2 minutes)
-3. **After 2 minutes** → System checks breathing (12 seconds)
-4. **No breathing detected** → LED 2 starts **FLASHING** (10s countdown)
-5. **User can cancel**: Press Button 2 → Both LEDs **OFF**
-6. **If not cancelled**: LED 2 goes **SOLID** → Calling 999
+2. System detect breath → **NOT** breathing → Emergency mode (LED 2 **SOLID** )
 
-#### Scenario 3: Manual Emergency (Button 1)
-1. **User presses Button 1** → LED 2 **SOLID** immediately (no countdown)
+#### Scenario 3: Manual Emergency
+1. **User presses Button 1** → LED 1 AND LED 2 **SOLID** immediately (no countdown)
 2. Calling 999 directly
-3. **Press Button 2** → LED 2 **OFF**, emergency cancelled
+3. **Press Button 2** → LED 1 & LED 2 **OFF**, emergency cancelled
 
-#### Scenario 4: Cancel During Countdown
-1. Fall detected → Breathing check → No breathing → LED 2 **FLASHING**
-2. **Press Button 2** → Both LEDs **OFF**
-3. System returns to normal monitoring
 
-📘 **For complete system flow details, see [INTEGRATED_SYSTEM_GUIDE.md](INTEGRATED_SYSTEM_GUIDE.md)**
-
-### Testing the Hardware
-
-After wiring, test each component:
-
-```bash
-# Test all GPIO components
-python3 test_components.py
-```
-
-**Expected output:**
-```
-Testing LED 1 (Fall)... ✓
-Testing LED 2 (Emergency) - Solid... ✓
-Testing LED 2 (Emergency) - Flash... ✓
-
-Now test buttons:
-- Press Button 1 to test Call 999
-- Press Button 2 to test Cancel
-```
 
 ### Troubleshooting Hardware
 
