@@ -380,35 +380,36 @@ class BreathingDetector:
             True if breathing detected, False otherwise
         """
         # AMPLITUDE-BASED detection (primary) with rate as sanity check
-        # For low-res cameras, focus on detecting ANY periodic motion
+        # For low-res cameras, detect significant periodic motion while rejecting noise
         
         # Reject suspiciously large motion (likely camera shake or body movement)
-        if motion_amplitude > 10.0:
+        if motion_amplitude > 50.0:
             logger.info(f"❌ Motion too large ({motion_amplitude:.2f}px) - likely camera shake or body movement")
             return False
         
-        # Amplitude thresholds (sensitive for low-res)
-        weak_motion = motion_amplitude >= 0.15    # Very sensitive
-        clear_motion = motion_amplitude >= 0.30   # More confident
-        strong_motion = motion_amplitude >= 0.50  # Very confident
+        # Amplitude thresholds (more conservative to avoid false positives)
+        weak_motion = motion_amplitude >= 0.5     # Minimum threshold (above camera noise)
+        clear_motion = motion_amplitude >= 1.0    # More confident
+        strong_motion = motion_amplitude >= 1.0   # Very confident
         
-        # Rate sanity check (very wide range, just eliminate obvious noise)
-        rate_reasonable = 5 <= breathing_rate <= 35  # Extremely wide range
+        # Rate sanity check (physiologically reasonable ranges)
+        rate_reasonable = 5 <= breathing_rate <= 35  # Very wide range
         rate_normal = 8 <= breathing_rate <= 25      # Normal range
+        rate_perfect = 10 <= breathing_rate <= 20    # Ideal range
         
-        # Detection logic (amplitude-dominant):
-        # 1. Strong motion (>0.5px) → accept if rate not crazy
+        # Detection logic (amplitude-dominant, more conservative):
+        # 1. Strong motion (>3.5px) → accept if rate not crazy
         if strong_motion and rate_reasonable:
             logger.info(f"✅ STRONG motion {motion_amplitude:.2f}px, rate {breathing_rate:.1f} BPM")
             return True
         
-        # 2. Clear motion (>0.3px) → accept if rate in normal range
+        # 2. Clear motion (>2.5px) → accept if rate in normal range
         if clear_motion and rate_normal:
             logger.info(f"✅ CLEAR motion {motion_amplitude:.2f}px, rate {breathing_rate:.1f} BPM")
             return True
         
-        # 3. Weak motion (>0.15px) → accept only with perfect rate
-        if weak_motion and 10 <= breathing_rate <= 20:
+        # 3. Weak motion (>2.0px) → accept only with perfect rate
+        if weak_motion and rate_perfect:
             logger.info(f"✅ WEAK motion {motion_amplitude:.2f}px, perfect rate {breathing_rate:.1f} BPM")
             return True
         
@@ -443,11 +444,11 @@ class BreathingDetector:
             
             rate_confidence = max(0.0, 1.0 - distance / 10.0)
         
-        # Amplitude confidence (very sensitive for low-res camera)
-        amplitude_confidence = min(1.0, motion_amplitude / 3.0)  # Lower threshold
+        # Amplitude confidence (conservative to match new thresholds)
+        amplitude_confidence = min(1.0, motion_amplitude / 4.0)  # Scale: 4px = 100%
         
-        # Combined confidence (favor detection)
-        confidence = (rate_confidence + amplitude_confidence) / 2.0 * 1.1  # Small boost
+        # Combined confidence (balanced)
+        confidence = (rate_confidence + amplitude_confidence) / 2.0
         
         return confidence
     

@@ -78,6 +78,9 @@ class ElderlyFallDetectionSystem:
         self.emergency_mode_start = None
         self.emergency_mode_duration = 10  # 10 seconds
         
+        # Breathing detection tracking (one-time check per fall)
+        self.breathing_check_done = False  # Flag to ensure breathing is checked only once per fall
+        
         # Initialize components
         logger.info("\n1. Initializing database...")
         self.db = Database(self.config['storage']['database_path'])
@@ -141,6 +144,10 @@ class ElderlyFallDetectionSystem:
     def _on_cancel_emergency(self):
         """Handle cancel button press - highest priority, resets everything."""
         logger.warning("🟢 BUTTON 2 PRESSED - SYSTEM RESET")
+        
+        # Reset breathing check flag - allow breathing check for next fall
+        self.breathing_check_done = False
+        logger.info("✓ Breathing check flag reset - ready for next fall detection")
         
         # Button 2 has highest priority - always reset to IDLE
         # Turns off LED1 and LED2, stops all monitoring
@@ -239,11 +246,17 @@ class ElderlyFallDetectionSystem:
                                     
                                     # Handle based on current emergency state
                                     if self.emergency.state == EmergencyState.IDLE:
-                                        # New fall detected - check breathing immediately
+                                        # New fall detected
                                         self.emergency.handle_fall_detected(result['confidence'])
-                                        logger.warning("🫁 BREATHING DETECTION MODE ACTIVATED 🫁")
-                                        logger.info("💨 Checking breathing immediately...")
-                                        self._check_breathing(result)
+                                        
+                                        # Check breathing ONLY ONCE per fall (not continuously)
+                                        if not self.breathing_check_done:
+                                            logger.warning("🫁 BREATHING DETECTION MODE ACTIVATED 🫁")
+                                            logger.info("💨 Checking breathing immediately (ONE-TIME check)...")
+                                            self._check_breathing(result)
+                                            self.breathing_check_done = True
+                                        else:
+                                            logger.info("ℹ️  Breathing already checked for this fall - skipping (press Button 2 to reset)")
                                     else:
                                         logger.debug(f"Fall continues (state: {self.emergency.state.value})")
                                 else:

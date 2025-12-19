@@ -29,7 +29,7 @@ breathing_detection:
   fps: 30  # frames per second
   min_breathing_rate: 6  # breaths per minute (very relaxed for slow breathing)
   max_breathing_rate: 30  # breaths per minute (upper bound)
-  min_motion_amplitude: 1.7  # pixels (low threshold for low-res camera)
+  min_motion_amplitude: 2.0 # pixels (increased to avoid false positives from noise)
   min_keypoints: 10  # minimum SIFT keypoints needed
   enabled: true
   
